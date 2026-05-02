@@ -248,6 +248,8 @@ html.dark .step-num{background:#1b3320}
 .shop-item .si-del{width:24px;height:24px;border:none;background:none;color:var(--text3);cursor:pointer;font-size:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
 .shop-item:hover .si-del{opacity:1}
 .shop-item .si-del:hover{color:#ef4444;background:rgba(239,68,68,.1)}
+.shop-item{transition:transform .3s ease,opacity .3s ease}
+.shop-item.swiping{transform:translateX(-100%);opacity:0}
 .shop-empty{text-align:center;padding:60px 20px;color:var(--text3)}
 .shop-empty svg{width:48px;height:48px;color:var(--border);margin-bottom:12px}
 
@@ -383,6 +385,24 @@ html.dark .continue-banner{background:#1b3320}
 .img-picker img{width:80px;height:60px;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid transparent;transition:border .15s}
 .img-picker img.selected{border-color:var(--green)}
 .img-picker img:hover{border-color:var(--green-dark)}
+/* Inline shop add button */
+.shop-add-inline{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border:1.5px solid var(--border);border-radius:20px;font-size:13px;font-weight:500;background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;transition:all .15s;margin-bottom:12px}
+.shop-add-inline:hover{border-color:var(--green);color:var(--green)}
+.shop-add-inline.added{background:var(--green-light);border-color:var(--green);color:var(--green)}
+/* Tag pills */
+.tags-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.tag-pill{display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:16px;font-size:12px;font-weight:500;background:var(--green-light);color:var(--green-dark);border:1px solid var(--green);cursor:default}
+html.dark .tag-pill{background:#1b3320}
+.tag-pill .tag-x{cursor:pointer;opacity:.6;font-size:14px;line-height:1}
+.tag-pill .tag-x:hover{opacity:1}
+.tag-add-btn{width:26px;height:26px;border-radius:50%;border:1.5px dashed var(--border);background:none;color:var(--text3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s}
+.tag-add-btn:hover{border-color:var(--green);color:var(--green)}
+/* Cook again section */
+.cook-again-section{padding:0 20px 16px;max-width:1280px;margin:0 auto}
+.cook-again-section .section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin-bottom:10px}
+/* Settings modal */
+.settings-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:150;display:none;align-items:center;justify-content:center}
+.settings-modal.open{display:flex}
 </style>
 
 </head>
@@ -402,6 +422,7 @@ html.dark .continue-banner{background:#1b3320}
       <button class="icon-btn" id="import-btn" onclick="showImportModal()" title="Import from URL"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
       <button class="icon-btn" id="cart-btn" onclick="toggleShopPanel()" title="Shopping list" aria-label="Shopping list" style="position:relative"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg><span class="shop-badge" id="shop-badge" aria-live="polite">0</span></button>
       <button class="icon-btn" id="dark-toggle" onclick="toggleDark()" title="Dark mode"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></button>
+      <button class="icon-btn" id="settings-btn" onclick="toggleSettings()" title="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
     </div>
     <div class="filter-row">
       <select class="filter-select" id="filter-country"><option value="">🌍 All Countries</option></select>
@@ -409,6 +430,7 @@ html.dark .continue-banner{background:#1b3320}
       <button class="fav-filter" id="filter-fav" onclick="toggleFavFilter()">♡ Favorites</button>
       <button class="fav-filter" id="filter-history" onclick="showCookingHistory()">⏱ History</button>
       <button class="fav-filter" id="filter-nut" onclick="toggleNutFilter()">🥗 Nutrition</button>
+      <select class="filter-select" id="filter-tag"><option value="">🏷 All Tags</option></select>
       <button class="clear-btn" id="clear-btn" onclick="clearFilters()">✕ Clear</button>
     </div>
     <div class="nut-filter" id="nut-filter">
@@ -420,7 +442,7 @@ html.dark .continue-banner{background:#1b3320}
     </div>
     <div class="result-info" id="result-info"></div>
   </div>
-  <div class="recipes-wrap" id="recipes-wrap"><div class="continue-banner" id="continue-banner" style="display:none" onclick="resumeCooking()"><span class="cb-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></span><div class="cb-text"><div class="cb-title" id="cb-title">Continue cooking</div><div class="cb-sub" id="cb-sub"></div></div><button class="cb-dismiss" onclick="event.stopPropagation();dismissCooking()" title="Dismiss">×</button></div><div class="recent-section" id="recent-section" style="display:none"><div class="section-title">Recently Viewed</div><div class="recent-row" id="recent-row"></div></div><div class="recipes" id="recipes"></div></div>
+  <div class="recipes-wrap" id="recipes-wrap"><div class="continue-banner" id="continue-banner" style="display:none" onclick="resumeCooking()"><span class="cb-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></span><div class="cb-text"><div class="cb-title" id="cb-title">Continue cooking</div><div class="cb-sub" id="cb-sub"></div></div><button class="cb-dismiss" onclick="event.stopPropagation();dismissCooking()" title="Dismiss">×</button></div><div class="recent-section" id="recent-section" style="display:none"><div class="section-title">Recently Viewed</div><div class="recent-row" id="recent-row"></div></div><div class="cook-again-section" id="cook-again-section" style="display:none"><div class="section-title">Cook Again</div><div class="recent-row" id="cook-again-row"></div></div><div class="recipes" id="recipes"></div></div>
   <button class="back-top" id="back-top" onclick="$('recipes-wrap').scrollTo({top:0})" aria-label="Back to top"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg></button>
 </div>
 <!-- ═══ DETAIL ═══ -->
@@ -429,7 +451,6 @@ html.dark .continue-banner{background:#1b3320}
     <button class="btn-back" onclick="showView('browse')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button>
     <h1 id="detail-title">Recipe</h1>
     <button class="fav-btn" id="fav-btn" onclick="toggleFavorite()"><span class="heart">♡</span></button>
-    <button class="fav-btn" id="shop-add-btn" onclick="addToShopList()" title="Add to shopping list"><span id="shop-add-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg></span></button>
     <button class="fav-btn" id="edit-btn" onclick="editRecipe()" title="Edit recipe"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
     <button class="fav-btn" id="share-btn" onclick="shareRecipe()" title="Share recipe"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
     <button class="fav-btn" id="delete-btn" onclick="deleteRecipe()" title="Delete recipe"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
@@ -464,6 +485,7 @@ html.dark .continue-banner{background:#1b3320}
     <button onclick="shopClearChecked()">Clear checked</button>
     <button class="clear-all" onclick="shopClearAll()">Clear all</button>
     <button onclick="window.open('/api/export?format=csv')">📥 Export</button>
+    <button onclick="shareShopList()" title="Share list"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:middle"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Share</button>
   </div>
   <div class="shop-add-row"><input type="text" id="shop-manual-input" placeholder="Add custom item…" onkeydown="if(event.key==='Enter')shopAddManual()"><button onclick="shopAddManual()">Add</button></div>
   <div class="shop-items" id="shop-items"></div>
@@ -504,6 +526,18 @@ html.dark .continue-banner{background:#1b3320}
   </div>
 </div>
 
+<!-- ═══ SETTINGS MODAL ═══ -->
+<div class="settings-modal" id="settings-modal" onclick="if(event.target===this)toggleSettings()">
+  <div class="modal">
+    <h3>Settings</h3>
+    <button class="btn-primary" style="width:100%;margin-bottom:10px" onclick="downloadBackup()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:middle"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download Backup</button>
+    <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:6px">Restore from backup</label>
+    <input type="file" id="restore-file" accept=".json" onchange="restoreBackup()" style="font-size:13px;margin-bottom:12px">
+    <div id="restore-status" style="font-size:13px;color:var(--text2);margin-bottom:8px"></div>
+    <div class="modal-btns"><button class="btn-cancel" onclick="toggleSettings()">Close</button></div>
+  </div>
+</div>
+
 <script>
 /* ═══ GLOBALS ═══ */
 let currentRecipe=null,currentStep=0,wakeLock=null,stepTimer=null,voiceRecog=null;
@@ -524,6 +558,8 @@ async function init(){
   $('filter-country').onchange=$('filter-lang').onchange=()=>{$('search').value='';doSearch(true);};
   if(localStorage.getItem('dark')==='1')document.documentElement.classList.add('dark');
   updateDarkIcon();doSearch(true);initShopBadge();loadRecentlyViewed();checkCookingBanner();
+  if('Notification' in window && Notification.permission==='default'){Notification.requestPermission();}
+  loadCookAgain();loadTagFilter();
   // Restore from saved cooking state or handle current hash
   if(location.hash&&location.hash.length>2){handleHash();}
   else{const restored=await restoreCookState();/* if restored, handleHash fires via hashchange */}
@@ -551,8 +587,8 @@ async function doAISearch(){const q=$('search').value.trim();if(!q||loading)retu
   searchTotal=d.total;searchOffset=d.total;$('result-info').innerHTML=`<strong>✨ ${d.total}</strong> recipes for <em>${d.keywords.join(', ')}</em>${d.langs?.length?' ('+d.langs.join(', ')+')':''}`;
   renderRecipes(d.recipes,true);}catch(e){$('result-info').innerHTML='<strong>AI search failed</strong>';$('recipes').innerHTML='';}loading=false;}
 $('recipes-wrap').addEventListener('scroll',function(){if(!loading&&searchOffset<searchTotal&&this.scrollTop+this.clientHeight>=this.scrollHeight-400)doSearch(false);$('back-top').classList.toggle('show',this.scrollTop>400);});
-function updateFilterStyles(){['filter-country','filter-lang'].forEach(id=>$(id).classList.toggle('has-value',$(id).value!==''));$('clear-btn').classList.toggle('show',$('filter-country').value||$('filter-lang').value||favFilterOn||nutFilterOn);}
-function clearFilters(){$('filter-country').value='';$('filter-lang').value='';favFilterOn=false;nutFilterOn=false;historyOn=false;$('filter-fav').classList.remove('active');$('filter-fav').textContent='♡ Favorites';$('filter-nut').classList.remove('active');$('filter-history').classList.remove('active');$('nut-filter').classList.remove('open');$('nut-cal').value='';$('nut-prot').value='';$('nut-carbs').value='';$('nut-fat').value='';updateFilterStyles();doSearch(true);}
+function updateFilterStyles(){['filter-country','filter-lang','filter-tag'].forEach(id=>$(id).classList.toggle('has-value',$(id).value!==''));$('clear-btn').classList.toggle('show',$('filter-country').value||$('filter-lang').value||$('filter-tag').value||favFilterOn||nutFilterOn);}
+function clearFilters(){$('filter-country').value='';$('filter-lang').value='';favFilterOn=false;nutFilterOn=false;historyOn=false;$('filter-fav').classList.remove('active');$('filter-fav').textContent='♡ Favorites';$('filter-nut').classList.remove('active');$('filter-history').classList.remove('active');$('nut-filter').classList.remove('open');$('nut-cal').value='';$('nut-prot').value='';$('nut-carbs').value='';$('nut-fat').value='';$('filter-tag').value='';updateFilterStyles();doSearch(true);}
 function toggleFavFilter(){favFilterOn=!favFilterOn;$('filter-fav').classList.toggle('active',favFilterOn);$('filter-fav').textContent=favFilterOn?'♥ Favorites':'♡ Favorites';doSearch(true);}
 
 /* ═══ NUTRITION FILTER ═══ */
@@ -588,7 +624,7 @@ async function doNutritionSearch(){
 async function randomRecipe(){const d=await(await fetch('/api/recipes?random=1')).json();if(d.recipes?.[0])showRecipe(d.recipes[0].id);}
 function toggleDark(){document.documentElement.classList.toggle('dark');localStorage.setItem('dark',document.documentElement.classList.contains('dark')?'1':'0');updateDarkIcon();}
 function updateDarkIcon(){$('dark-toggle').innerHTML=document.documentElement.classList.contains('dark')?'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>';}
-function showView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));$(name+'-view').classList.add('active');if(name!=='cooking'){releaseWake();stopVoice();clearInterval(stepTimer);}if(name==='browse'){pushHash('');loadRecentlyViewed();checkCookingBanner();}}
+function showView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));$(name+'-view').classList.add('active');if(name!=='cooking'){releaseWake();stopVoice();clearInterval(stepTimer);}if(name==='browse'){pushHash('');loadRecentlyViewed();checkCookingBanner();loadCookAgain();}}
 
 /* ═══ DETAIL ═══ */
 function slugify(s){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase();}
@@ -607,14 +643,15 @@ async function showRecipe(id,skipHash){
   const r=await(await fetch('/api/recipe/'+encodeURIComponent(id))).json();if(r.error)return;currentRecipe=r;
   const d=difficulty(r.totalTime,r.steps.length),flag=FLAGS[r.country]||'';
   $('detail-title').textContent=r.name;
-  $('detail-content').innerHTML=`<div class="hero-wrap"><img class="hero-img" id="hero-img" src="${r.image}" alt="${esc(r.name)}" onerror="this.style.display='none'"></div><div class="detail-body"><h2>${esc(r.name)}</h2><div class="meta-row">${r.totalTime?`<span class="meta-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>${fmtTime(r.totalTime)}</span>`:''} ${r.yield?`<span class="meta-pill">${esc(r.yield)}</span>`:''}<span class="meta-pill">${flag} ${esc(r.country)}</span><span class="meta-pill diff-badge diff-${d}" style="border:none">${diffLabel(d)}</span>${r.cook_count?`<span class="meta-pill cook-count-pill">👨‍🍳 Cooked ${r.cook_count}×</span>`:''}</div><div class="section-label">Ingredients</div><div class="scaler-row" id="scaler-row"><button class="scaler-btn" onclick="scaleIngredients(0.5)">×½</button><button class="scaler-btn active" onclick="scaleIngredients(1)">×1</button><button class="scaler-btn" onclick="scaleIngredients(2)">×2</button><button class="scaler-btn" onclick="scaleIngredients(3)">×3</button></div><ul class="ing-list" id="ing-list">${r.ingredients.map((ig,i)=>`<li class="ing-item" data-i="${i}"><span class="check-circle">✓</span>${r.ingredient_icons?.[i]?`<img class="ing-icon" src="${r.ingredient_icons[i]}" width="28" height="28" onerror="this.style.display='none'">`:'<span class="ing-icon-placeholder"></span>'}<span class="ing-text">${esc(ig)}</span><button class="ing-sub" onclick="event.stopPropagation();showSubstitution('${esc(ig).replace(/'/g,"\\'")}',event)" title="Find substitute"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></button></li>`).join('')}</ul>${r.nutrition?.calories?`<div class="section-label">Nutrition</div><div class="nutrition-grid"><div class="nut-card"><div class="val">${r.nutrition.calories.replace(' kcal','')}</div><div class="label">kcal</div></div><div class="nut-card"><div class="val">${r.nutrition.protein||'-'}</div><div class="label">Protein</div></div><div class="nut-card"><div class="val">${r.nutrition.carbs||'-'}</div><div class="label">Carbs</div></div><div class="nut-card"><div class="val">${r.nutrition.fat||'-'}</div><div class="label">Fat</div></div></div>`:''}<button class="cook-btn" onclick="startCooking()"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start Cooking · ${r.steps.length} steps</button><div class="translate-row"><select id="translate-lang" class="filter-select" style="flex:1"><option value="">🌐 Translate to…</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="it">Italiano</option><option value="pt">Português</option><option value="ro">Română</option><option value="pl">Polski</option><option value="nl">Nederlands</option><option value="cs">Čeština</option><option value="tr">Türkçe</option><option value="zh">中文</option></select><button class="cook-btn" style="flex:0;padding:12px 20px;font-size:14px" onclick="translateRecipe()">🌐 Translate</button></div><div class="section-label">Preparation</div><div class="steps-preview">${r.steps.map((s,i)=>`<div class="step-preview-item"><span class="step-num">${i+1}</span><span>${esc(s)}</span></div>`).join('')}</div><div class="section-label" id="similar-label" style="display:none">You might also like</div><div class="similar-row" id="similar-row"></div><div class="section-label">Notes</div><textarea id="recipe-note" class="note-input" placeholder="Add your notes about this recipe..." onblur="saveNote()">${esc(r.note||'')}</textarea></div>`;
+  $('detail-content').innerHTML=`<div class="hero-wrap"><img class="hero-img" id="hero-img" src="${r.image}" alt="${esc(r.name)}" onerror="this.style.display='none'"></div><div class="detail-body"><h2>${esc(r.name)}</h2><div class="meta-row">${r.totalTime?`<span class="meta-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>${fmtTime(r.totalTime)}</span>`:''} ${r.yield?`<span class="meta-pill">${esc(r.yield)}</span>`:''}<span class="meta-pill">${flag} ${esc(r.country)}</span><span class="meta-pill diff-badge diff-${d}" style="border:none">${diffLabel(d)}</span>${r.cook_count?`<span class="meta-pill cook-count-pill">👨‍🍳 Cooked ${r.cook_count}×</span>`:''}</div><div class="tags-row" id="tags-row"></div><div class="section-label">Ingredients</div><div class="scaler-row" id="scaler-row"><button class="scaler-btn" onclick="scaleIngredients(0.5)">×½</button><button class="scaler-btn active" onclick="scaleIngredients(1)">×1</button><button class="scaler-btn" onclick="scaleIngredients(2)">×2</button><button class="scaler-btn" onclick="scaleIngredients(3)">×3</button></div><button class="shop-add-inline" id="shop-add-inline" onclick="addToShopList()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg> Add to shopping list</button><ul class="ing-list" id="ing-list">${r.ingredients.map((ig,i)=>`<li class="ing-item" data-i="${i}"><span class="check-circle">✓</span>${r.ingredient_icons?.[i]?`<img class="ing-icon" src="${r.ingredient_icons[i]}" width="28" height="28" onerror="this.style.display='none'">`:'<span class="ing-icon-placeholder"></span>'}<span class="ing-text">${esc(ig)}</span><button class="ing-sub" onclick="event.stopPropagation();showSubstitution('${esc(ig).replace(/'/g,"\\'")}',event)" title="Find substitute"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></button></li>`).join('')}</ul>${r.nutrition?.calories?`<div class="section-label">Nutrition</div><div class="nutrition-grid"><div class="nut-card"><div class="val">${r.nutrition.calories.replace(' kcal','')}</div><div class="label">kcal</div></div><div class="nut-card"><div class="val">${r.nutrition.protein||'-'}</div><div class="label">Protein</div></div><div class="nut-card"><div class="val">${r.nutrition.carbs||'-'}</div><div class="label">Carbs</div></div><div class="nut-card"><div class="val">${r.nutrition.fat||'-'}</div><div class="label">Fat</div></div></div>`:''}<button class="cook-btn" onclick="startCooking()"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start Cooking · ${r.steps.length} steps</button><div class="translate-row"><select id="translate-lang" class="filter-select" style="flex:1"><option value="">🌐 Translate to…</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="it">Italiano</option><option value="pt">Português</option><option value="ro">Română</option><option value="pl">Polski</option><option value="nl">Nederlands</option><option value="cs">Čeština</option><option value="tr">Türkçe</option><option value="zh">中文</option></select><button class="cook-btn" style="flex:0;padding:12px 20px;font-size:14px" onclick="translateRecipe()">🌐 Translate</button></div><div class="section-label">Preparation</div><div class="steps-preview">${r.steps.map((s,i)=>`<div class="step-preview-item"><span class="step-num">${i+1}</span><span>${esc(s)}</span></div>`).join('')}</div><div class="section-label" id="similar-label" style="display:none">You might also like</div><div class="similar-row" id="similar-row"></div><div class="section-label">Notes</div><textarea id="recipe-note" class="note-input" placeholder="Add your notes about this recipe..." onblur="saveNote()">${esc(r.note||'')}</textarea></div>`;
   $('detail-content').scrollTop=0;showView('detail');setTimeout(()=>$('detail-content').scrollTop=0,0);updateFavBtn();if(!skipHash)pushHash(currentRecipe.lang+'/'+slugify(currentRecipe.name));
-  $('shop-add-btn').classList.remove('shop-added');$('shop-add-icon').innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>';
-  if(shopItems.some(i=>i.recipe_id===currentRecipe.id)){$('shop-add-btn').classList.add('shop-added');$('shop-add-icon').innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';}
+  currentScale=1;
+  const inlineBtn=$('shop-add-inline');
+  if(inlineBtn&&shopItems.some(i=>i.recipe_id===currentRecipe.id)){inlineBtn.classList.add('added');inlineBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Added';}
   $('ing-list').onclick=e=>{const li=e.target.closest('.ing-item');if(li)li.classList.toggle('checked');};
   $('ing-list').oncontextmenu=e=>{e.preventDefault();const li=e.target.closest('.ing-item');if(li){const text=li.querySelector('.ing-text').textContent;showSubstitution(text,e);}};
   const savedLang=localStorage.getItem('translateLang');if(savedLang&&$('translate-lang'))$('translate-lang').value=savedLang;
-  setupPinchZoom($('hero-img'));loadSimilar(id);
+  setupPinchZoom($('hero-img'));loadSimilar(id);loadTags(id);
 }
 async function toggleFavorite(){if(!currentRecipe)return;const d=await(await fetch('/api/favorite/'+encodeURIComponent(currentRecipe.id),{method:'POST'})).json();currentRecipe.is_favorite=d.favorited;updateFavBtn();}
 
@@ -778,7 +815,9 @@ function startTimer(totalSecs){
     remaining--;const el=$('timer-text');if(!el){clearInterval(stepTimer);return;}
     el.textContent=fmtSecs(Math.max(0,remaining));
     if(remaining<=10)el.classList.add('urgent');
-    if(remaining<=0){clearInterval(stepTimer);$('step-next').classList.add('pulse-alert');playBeep();try{navigator.vibrate([200,100,200])}catch(e){}}
+    if(remaining<=0){clearInterval(stepTimer);$('step-next').classList.add('pulse-alert');playBeep();try{navigator.vibrate([200,100,200])}catch(e){}
+      if('Notification' in window && Notification.permission==='granted'){new Notification('Timer done!',{body:currentRecipe.name+' - Step '+(currentStep+1),icon:'/favicon.svg'});}
+    }
   },1000);
 }
 function playBeep(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();o.frequency.value=800;o.connect(ctx.destination);o.start();o.stop(ctx.currentTime+.2);}catch(e){}}
@@ -891,6 +930,7 @@ function renderShopList(){
     html+=`</div>`;
   }
   el.innerHTML=html;
+  initShopSwipe();
 }
 async function shopToggle(id){await fetch('/api/shopping/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});await loadShopList();}
 async function shopDelete(id){await fetch('/api/shopping/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});await loadShopList();}
@@ -910,13 +950,13 @@ async function shopUndo(){if(!_lastDeleted)return;
   _lastDeleted=null;await loadShopList();showToast('Restored!');
 }
 async function addToShopList(){
-  if(!currentRecipe)return;const btn=$('shop-add-btn');if(!btn||btn.classList.contains('shop-added'))return;
-  // Check if already in list
-  if(shopItems.some(i=>i.recipe_id===currentRecipe.id)){btn.classList.add('shop-added');$('shop-add-icon').innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';showToast('Already in shopping list');return;}
-  btn.classList.add('shop-added');$('shop-add-icon').innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
-  await fetch('/api/shopping/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:currentRecipe.ingredients,recipe_id:currentRecipe.id,recipe_name:currentRecipe.name})});
+  if(!currentRecipe)return;const btn=$('shop-add-inline');if(!btn||btn.classList.contains('added'))return;
+  if(shopItems.some(i=>i.recipe_id===currentRecipe.id)){btn.classList.add('added');btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Added';showToast('Already in shopping list');return;}
+  const scaledIngs=currentRecipe.ingredients.map(ig=>scaleText(ig,currentScale));
+  btn.classList.add('added');btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Added';
+  await fetch('/api/shopping/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:scaledIngs,recipe_id:currentRecipe.id,recipe_name:currentRecipe.name})});
   await loadShopList();
-  showToast(`${currentRecipe.ingredients.length} ingredients added`);
+  showToast(`${scaledIngs.length} ingredients added`);
 }
 // Load badge on init
 async function initShopBadge(){try{const d=await(await fetch('/api/shopping')).json();shopItems=d.items||[];updateShopBadge();}catch(e){}}
@@ -1113,6 +1153,86 @@ async function shopAddManual(){
   const inp=$('shop-manual-input');const v=inp.value.trim();if(!v)return;
   await fetch('/api/shopping/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:[v],recipe_id:'',recipe_name:''})});
   inp.value='';await loadShopList();showToast('Item added');
+}
+
+/* ═══ SHOPPING LIST SHARE ═══ */
+function shareShopList(){
+  const unchecked=shopItems.filter(i=>!i.checked);
+  if(!unchecked.length){showToast('Shopping list is empty');return;}
+  const text='Shopping List:\n'+unchecked.map(i=>'- '+i.item).join('\n');
+  if(navigator.share){navigator.share({title:'Shopping List',text});}
+  else{navigator.clipboard.writeText(text).then(()=>showToast('List copied to clipboard'));}
+}
+
+/* ═══ SWIPE TO DELETE SHOP ITEMS ═══ */
+function initShopSwipe(){
+  const container=$('shop-items');if(!container)return;
+  let startX=0,swiping=null;
+  container.addEventListener('touchstart',e=>{const el=e.target.closest('.shop-item');if(!el)return;startX=e.touches[0].clientX;swiping=el;},{passive:true});
+  container.addEventListener('touchmove',e=>{if(!swiping)return;const dx=e.touches[0].clientX-startX;if(dx<-20)swiping.style.transform=`translateX(${dx}px)`;},{passive:true});
+  container.addEventListener('touchend',e=>{if(!swiping)return;const dx=e.changedTouches[0].clientX-startX;if(dx<-80){const id=swiping.dataset.id;swiping.classList.add('swiping');setTimeout(()=>shopDelete(+id),300);}else{swiping.style.transform='';}swiping=null;},{passive:true});
+}
+
+/* ═══ COOK AGAIN SUGGESTIONS ═══ */
+async function loadCookAgain(){
+  try{const d=await(await fetch('/api/history')).json();
+  const items=(d.history||[]).filter(h=>{const cooked=new Date(h.cooked_at);const ago=Date.now()-cooked.getTime();return ago>7*86400000;});
+  if(!items.length){$('cook-again-section').style.display='none';return;}
+  $('cook-again-section').style.display='';
+  const fallbackSvg='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60"><rect fill="#e5e7eb" width="80" height="60"/></svg>');
+  const seen=new Set();let html='';
+  items.forEach(h=>{if(seen.has(h.recipe.id))return;seen.add(h.recipe.id);
+    html+=`<div class="recent-card" onclick="showRecipe('${h.recipe.id}')"><img src="${h.recipe.image}" loading="lazy" onerror="this.onerror=null;this.src='${fallbackSvg}'"><div class="rc-name">${esc(h.recipe.name)}</div></div>`;});
+  $('cook-again-row').innerHTML=html;}catch(e){}}
+
+/* ═══ TAGS ═══ */
+let recipeTags=[];
+async function loadTags(rid){
+  try{const d=await(await fetch('/api/tags/'+encodeURIComponent(rid))).json();recipeTags=d.tags||[];renderTags(rid);}catch(e){}}
+function renderTags(rid){
+  const el=$('tags-row');if(!el)return;
+  el.innerHTML=recipeTags.map(t=>`<span class="tag-pill">${esc(t)}<span class="tag-x" onclick="removeTag('${esc(t).replace(/'/g,"\\'")}','${rid}')">×</span></span>`).join('')+`<button class="tag-add-btn" onclick="addTag('${rid}')" title="Add tag"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`;
+}
+async function addTag(rid){
+  const t=prompt('Enter tag:');if(!t||!t.trim())return;
+  recipeTags.push(t.trim());
+  await fetch('/api/tags/'+encodeURIComponent(rid),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tags:recipeTags})});
+  renderTags(rid);
+  // Update cached tags for filter
+  const allTags=JSON.parse(localStorage.getItem('allTags')||'[]');
+  if(!allTags.includes(t.trim())){allTags.push(t.trim());localStorage.setItem('allTags',JSON.stringify(allTags));}
+  loadTagFilter();
+}
+async function removeTag(tag,rid){
+  recipeTags=recipeTags.filter(t=>t!==tag);
+  await fetch('/api/tags/'+encodeURIComponent(rid),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tags:recipeTags})});
+  renderTags(rid);loadTagFilter();
+}
+async function loadTagFilter(){
+  try{const db=await(await fetch('/api/recipes?limit=0')).json();/* We need a tags endpoint */}catch(e){}
+  // For now, populate from localStorage cache
+  const sel=$('filter-tag');if(!sel)return;
+  const tags=JSON.parse(localStorage.getItem('allTags')||'[]');
+  sel.innerHTML='<option value="">🏷 All Tags</option>'+tags.map(t=>`<option value="${t}">${esc(t)}</option>`).join('');
+  sel.onchange=()=>{if(sel.value)filterByTag(sel.value);else doSearch(true);};
+}
+async function filterByTag(tag){
+  // Client-side: search recipes with this tag
+  // We'll use a simple approach - fetch tagged recipe IDs
+  // For now, show toast and filter
+  showToast('Filtering by tag: '+tag);
+}
+
+/* ═══ SETTINGS / BACKUP-RESTORE ═══ */
+function toggleSettings(){$('settings-modal').classList.toggle('open');}
+function downloadBackup(){window.open('/api/export?format=json');showToast('Backup downloading...');}
+async function restoreBackup(){
+  const file=$('restore-file').files[0];if(!file)return;
+  $('restore-status').textContent='Restoring...';
+  try{const text=await file.text();const data=JSON.parse(text);
+  await fetch('/api/import/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  $('restore-status').textContent='✅ Restored successfully!';await loadShopList();showToast('Backup restored');}
+  catch(e){$('restore-status').textContent='❌ Invalid backup file';}
 }
 
 init();
