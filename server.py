@@ -20,7 +20,7 @@ from lib.handlers.cooking import (
 )
 from lib.handlers.ai_handlers import _ai, _ai_create, _ai_image_search, _substitutions
 from lib.handlers.auth import _check_auth, _auth_page, _auth_login
-from lib.handlers.misc import _export, _poll, _health, _share_recipe, _note_get, _note_save
+from lib.handlers.misc import _export, _poll, _health, _share_recipe, _note_get, _note_save, _restore, _tags_get, _tags_save
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -156,6 +156,9 @@ Handler._health = _health
 Handler._share_recipe = _share_recipe
 Handler._note_get = _note_get
 Handler._note_save = _note_save
+Handler._restore = _restore
+Handler._tags_get = _tags_get
+Handler._tags_save = _tags_save
 
 
 # ═══ OVERRIDE do_GET/do_POST for auth + new routes ═══
@@ -181,6 +184,8 @@ def _authed_do_GET(self):
         return self._share_recipe(unquote(p.path[11:]))
     if p.path == "/api/nutrition":
         return self._nutrition_search(parse_qs(p.query))
+    if p.path.startswith("/api/tags/"):
+        return self._tags_get(unquote(p.path[10:]))
     return _orig_do_GET(self)
 
 def _authed_do_POST(self):
@@ -254,6 +259,22 @@ def _authed_do_POST(self):
         try: req = json.loads(body) if body else {}
         except: req = {}
         return self._substitutions(req)
+    if p.path.startswith("/api/tags/"):
+        content_len = int(self.headers.get("Content-Length", 0))
+        if content_len > MAX_BODY_SIZE:
+            return self.send_error(413)
+        body = self.rfile.read(content_len)
+        try: req = json.loads(body) if body else {}
+        except: req = {}
+        return self._tags_save(unquote(p.path[10:]), req)
+    if p.path == "/api/import/restore":
+        content_len = int(self.headers.get("Content-Length", 0))
+        if content_len > MAX_BODY_SIZE:
+            return self.send_error(413)
+        body = self.rfile.read(content_len)
+        try: req = json.loads(body) if body else {}
+        except: req = {}
+        return self._restore(req)
     return _orig_do_POST(self)
 
 Handler.do_GET = _authed_do_GET

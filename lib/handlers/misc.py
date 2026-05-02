@@ -104,3 +104,37 @@ def _note_save(self, rid, req):
         db.execute("DELETE FROM recipe_notes WHERE recipe_id=?", [rid])
     db.commit()
     self._json({"ok": True})
+
+def _restore(self, req):
+    """Restore favorites, notes, shopping list from backup JSON."""
+    db = get_db()
+    if req.get("favorites"):
+        for rid in req["favorites"]:
+            db.execute("INSERT OR IGNORE INTO favorites(recipe_id) VALUES(?)", [str(rid)])
+    if req.get("notes"):
+        for n in req["notes"]:
+            if n.get("recipe_id") and n.get("note"):
+                db.execute("INSERT OR REPLACE INTO recipe_notes(recipe_id,note,updated_at) VALUES(?,?,datetime('now'))", [n["recipe_id"], n["note"]])
+    if req.get("shopping"):
+        for s in req["shopping"]:
+            if s.get("item"):
+                db.execute("INSERT INTO shopping_list(item,recipe_id,recipe_name,checked) VALUES(?,?,?,?)",
+                           [s["item"], s.get("recipe_id",""), s.get("recipe_name",""), s.get("checked",0)])
+    db.commit()
+    self._json({"ok": True})
+
+def _tags_get(self, rid):
+    db = get_db()
+    rows = db.execute("SELECT tag FROM recipe_tags WHERE recipe_id=?", [rid]).fetchall()
+    self._json({"tags": [r["tag"] for r in rows]})
+
+def _tags_save(self, rid, req):
+    db = get_db()
+    tags = req.get("tags", [])
+    db.execute("DELETE FROM recipe_tags WHERE recipe_id=?", [rid])
+    for t in tags:
+        t = str(t).strip()
+        if t:
+            db.execute("INSERT OR IGNORE INTO recipe_tags(recipe_id,tag) VALUES(?,?)", [rid, t])
+    db.commit()
+    self._json({"ok": True})

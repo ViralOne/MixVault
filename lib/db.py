@@ -45,6 +45,11 @@ def get_db():
                 step INTEGER DEFAULT 0,
                 updated_at TEXT DEFAULT (datetime('now'))
             );
+            CREATE TABLE IF NOT EXISTS recipe_tags (
+                recipe_id TEXT,
+                tag TEXT,
+                PRIMARY KEY(recipe_id, tag)
+            );
         """)
         # Migration: add recipe_name column if missing
         try:
