@@ -346,6 +346,17 @@ html.dark .continue-banner{background:#1b3320}
 .sub-popover .sub-name{font-weight:600}
 .sub-popover .sub-ratio{color:var(--green);font-size:12px}
 .sub-popover .sub-note{color:var(--text3);font-size:12px}
+/* Substitution button on ingredient */
+.ing-item .ing-sub{width:24px;height:24px;border:none;background:none;color:var(--text3);cursor:pointer;font-size:13px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:auto;transition:all .15s}
+.ing-item .ing-sub:hover{color:var(--green);background:var(--green-light)}
+/* Nutrition filter panel */
+.nut-filter{display:none;gap:8px;padding:8px 0;flex-wrap:wrap;align-items:center}
+.nut-filter.open{display:flex}
+.nut-filter input{width:80px;padding:6px 10px;border:1.5px solid var(--border);border-radius:12px;font-size:12px;font-family:inherit;background:var(--bg);color:var(--text);outline:none}
+.nut-filter input:focus{border-color:var(--green)}
+.nut-filter label{font-size:11px;color:var(--text2);font-weight:500}
+.nut-filter .nut-group{display:flex;flex-direction:column;gap:2px}
+.nut-filter button{padding:6px 14px;border:none;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;background:var(--green);color:#fff}
 /* AI Creator panel */
 .creator-panel{position:fixed;top:0;right:-100%;width:100%;max-width:480px;height:100dvh;background:var(--card);z-index:100;display:flex;flex-direction:column;transition:right .3s ease;box-shadow:-4px 0 24px rgba(0,0,0,.15)}
 .creator-panel.open{right:0}
@@ -393,7 +404,15 @@ html.dark .continue-banner{background:#1b3320}
       <select class="filter-select" id="filter-country"><option value="">🌍 All Countries</option></select>
       <select class="filter-select" id="filter-lang"><option value="">🗣 All Languages</option></select>
       <button class="fav-filter" id="filter-fav" onclick="toggleFavFilter()">♡ Favorites</button>
+      <button class="fav-filter" id="filter-nut" onclick="toggleNutFilter()">🥗 Nutrition</button>
       <button class="clear-btn" id="clear-btn" onclick="clearFilters()">✕ Clear</button>
+    </div>
+    <div class="nut-filter" id="nut-filter">
+      <div class="nut-group"><label>Max kcal</label><input type="number" id="nut-cal" placeholder="500"></div>
+      <div class="nut-group"><label>Min protein (g)</label><input type="number" id="nut-prot" placeholder="20"></div>
+      <div class="nut-group"><label>Max carbs (g)</label><input type="number" id="nut-carbs" placeholder="50"></div>
+      <div class="nut-group"><label>Max fat (g)</label><input type="number" id="nut-fat" placeholder="30"></div>
+      <button onclick="doNutritionSearch()">Filter</button>
     </div>
     <div class="result-info" id="result-info"></div>
   </div>
@@ -528,9 +547,27 @@ async function doAISearch(){const q=$('search').value.trim();if(!q||loading)retu
   searchTotal=d.total;searchOffset=d.total;$('result-info').innerHTML=`<strong>✨ ${d.total}</strong> recipes for <em>${d.keywords.join(', ')}</em>${d.langs?.length?' ('+d.langs.join(', ')+')':''}`;
   renderRecipes(d.recipes,true);}catch(e){$('result-info').innerHTML='<strong>AI search failed</strong>';$('recipes').innerHTML='';}loading=false;}
 $('recipes-wrap').addEventListener('scroll',function(){if(!loading&&searchOffset<searchTotal&&this.scrollTop+this.clientHeight>=this.scrollHeight-400)doSearch(false);$('back-top').classList.toggle('show',this.scrollTop>400);});
-function updateFilterStyles(){['filter-country','filter-lang'].forEach(id=>$(id).classList.toggle('has-value',$(id).value!==''));$('clear-btn').classList.toggle('show',$('filter-country').value||$('filter-lang').value||favFilterOn);}
-function clearFilters(){$('filter-country').value='';$('filter-lang').value='';favFilterOn=false;$('filter-fav').classList.remove('active');$('filter-fav').textContent='♡ Favorites';updateFilterStyles();doSearch(true);}
+function updateFilterStyles(){['filter-country','filter-lang'].forEach(id=>$(id).classList.toggle('has-value',$(id).value!==''));$('clear-btn').classList.toggle('show',$('filter-country').value||$('filter-lang').value||favFilterOn||nutFilterOn);}
+function clearFilters(){$('filter-country').value='';$('filter-lang').value='';favFilterOn=false;nutFilterOn=false;$('filter-fav').classList.remove('active');$('filter-fav').textContent='♡ Favorites';$('filter-nut').classList.remove('active');$('nut-filter').classList.remove('open');$('nut-cal').value='';$('nut-prot').value='';$('nut-carbs').value='';$('nut-fat').value='';updateFilterStyles();doSearch(true);}
 function toggleFavFilter(){favFilterOn=!favFilterOn;$('filter-fav').classList.toggle('active',favFilterOn);$('filter-fav').textContent=favFilterOn?'♥ Favorites':'♡ Favorites';doSearch(true);}
+
+/* ═══ NUTRITION FILTER ═══ */
+let nutFilterOn=false;
+function toggleNutFilter(){nutFilterOn=!nutFilterOn;$('nut-filter').classList.toggle('open',nutFilterOn);$('filter-nut').classList.toggle('active',nutFilterOn);if(!nutFilterOn)doSearch(true);}
+async function doNutritionSearch(){
+  if(loading)return;loading=true;showSkeleton();
+  const params=new URLSearchParams();
+  const cal=$('nut-cal').value;if(cal)params.set('max_calories',cal);
+  const prot=$('nut-prot').value;if(prot)params.set('min_protein',prot);
+  const carbs=$('nut-carbs').value;if(carbs)params.set('max_carbs',carbs);
+  const fat=$('nut-fat').value;if(fat)params.set('max_fat',fat);
+  if($('filter-lang').value)params.set('lang',$('filter-lang').value);
+  params.set('limit','60');
+  const data=await(await fetch('/api/nutrition?'+params)).json();
+  searchTotal=data.total;searchOffset=data.total;
+  $('result-info').innerHTML=`<strong>🥗 ${data.total}</strong> recipes matching nutrition goals`;
+  renderRecipes(data.recipes,true);loading=false;
+}
 async function randomRecipe(){const d=await(await fetch('/api/recipes?random=1')).json();if(d.recipes?.[0])showRecipe(d.recipes[0].id);}
 function toggleDark(){document.documentElement.classList.toggle('dark');localStorage.setItem('dark',document.documentElement.classList.contains('dark')?'1':'0');updateDarkIcon();}
 function updateDarkIcon(){$('dark-toggle').textContent=document.documentElement.classList.contains('dark')?'☀️':'🌙';}
@@ -553,7 +590,7 @@ async function showRecipe(id,skipHash){
   const r=await(await fetch('/api/recipe/'+encodeURIComponent(id))).json();if(r.error)return;currentRecipe=r;
   const d=difficulty(r.totalTime,r.steps.length),flag=FLAGS[r.country]||'';
   $('detail-title').textContent=r.name;
-  $('detail-content').innerHTML=`<div class="hero-wrap"><img class="hero-img" id="hero-img" src="${r.image}" alt="${esc(r.name)}" onerror="this.style.display='none'"></div><div class="detail-body"><h2>${esc(r.name)}</h2><div class="meta-row">${r.totalTime?`<span class="meta-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>${fmtTime(r.totalTime)}</span>`:''} ${r.yield?`<span class="meta-pill">${esc(r.yield)}</span>`:''}<span class="meta-pill">${flag} ${esc(r.country)}</span><span class="meta-pill diff-badge diff-${d}" style="border:none">${diffLabel(d)}</span>${r.cook_count?`<span class="meta-pill cook-count-pill">👨‍🍳 Cooked ${r.cook_count}×</span>`:''}</div><div class="section-label">Ingredients</div><div class="scaler-row" id="scaler-row"><button class="scaler-btn" onclick="scaleIngredients(0.5)">×½</button><button class="scaler-btn active" onclick="scaleIngredients(1)">×1</button><button class="scaler-btn" onclick="scaleIngredients(2)">×2</button><button class="scaler-btn" onclick="scaleIngredients(3)">×3</button></div><ul class="ing-list" id="ing-list">${r.ingredients.map((ig,i)=>`<li class="ing-item" data-i="${i}"><span class="check-circle">✓</span>${r.ingredient_icons?.[i]?`<img class="ing-icon" src="${r.ingredient_icons[i]}" width="28" height="28" onerror="this.style.display='none'">`:'<span class="ing-icon-placeholder"></span>'}<span class="ing-text">${esc(ig)}</span></li>`).join('')}</ul>${r.nutrition?.calories?`<div class="section-label">Nutrition</div><div class="nutrition-grid"><div class="nut-card"><div class="val">${r.nutrition.calories.replace(' kcal','')}</div><div class="label">kcal</div></div><div class="nut-card"><div class="val">${r.nutrition.protein||'-'}</div><div class="label">Protein</div></div><div class="nut-card"><div class="val">${r.nutrition.carbs||'-'}</div><div class="label">Carbs</div></div><div class="nut-card"><div class="val">${r.nutrition.fat||'-'}</div><div class="label">Fat</div></div></div>`:''}<button class="cook-btn" onclick="startCooking()"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start Cooking · ${r.steps.length} steps</button><div class="translate-row"><select id="translate-lang" class="filter-select" style="flex:1"><option value="">🌐 Translate to…</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="it">Italiano</option><option value="pt">Português</option><option value="ro">Română</option><option value="pl">Polski</option><option value="nl">Nederlands</option><option value="cs">Čeština</option><option value="tr">Türkçe</option><option value="zh">中文</option></select><button class="cook-btn" style="flex:0;padding:12px 20px;font-size:14px" onclick="translateRecipe()">🌐 Translate</button></div><div class="section-label">Preparation</div><div class="steps-preview">${r.steps.map((s,i)=>`<div class="step-preview-item"><span class="step-num">${i+1}</span><span>${esc(s)}</span></div>`).join('')}</div><div class="section-label" id="similar-label" style="display:none">You might also like</div><div class="similar-row" id="similar-row"></div></div>`;
+  $('detail-content').innerHTML=`<div class="hero-wrap"><img class="hero-img" id="hero-img" src="${r.image}" alt="${esc(r.name)}" onerror="this.style.display='none'"></div><div class="detail-body"><h2>${esc(r.name)}</h2><div class="meta-row">${r.totalTime?`<span class="meta-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>${fmtTime(r.totalTime)}</span>`:''} ${r.yield?`<span class="meta-pill">${esc(r.yield)}</span>`:''}<span class="meta-pill">${flag} ${esc(r.country)}</span><span class="meta-pill diff-badge diff-${d}" style="border:none">${diffLabel(d)}</span>${r.cook_count?`<span class="meta-pill cook-count-pill">👨‍🍳 Cooked ${r.cook_count}×</span>`:''}</div><div class="section-label">Ingredients</div><div class="scaler-row" id="scaler-row"><button class="scaler-btn" onclick="scaleIngredients(0.5)">×½</button><button class="scaler-btn active" onclick="scaleIngredients(1)">×1</button><button class="scaler-btn" onclick="scaleIngredients(2)">×2</button><button class="scaler-btn" onclick="scaleIngredients(3)">×3</button></div><ul class="ing-list" id="ing-list">${r.ingredients.map((ig,i)=>`<li class="ing-item" data-i="${i}"><span class="check-circle">✓</span>${r.ingredient_icons?.[i]?`<img class="ing-icon" src="${r.ingredient_icons[i]}" width="28" height="28" onerror="this.style.display='none'">`:'<span class="ing-icon-placeholder"></span>'}<span class="ing-text">${esc(ig)}</span><button class="ing-sub" onclick="event.stopPropagation();showSubstitution('${esc(ig).replace(/'/g,"\\'")}',event)" title="Find substitute">🔄</button></li>`).join('')}</ul>${r.nutrition?.calories?`<div class="section-label">Nutrition</div><div class="nutrition-grid"><div class="nut-card"><div class="val">${r.nutrition.calories.replace(' kcal','')}</div><div class="label">kcal</div></div><div class="nut-card"><div class="val">${r.nutrition.protein||'-'}</div><div class="label">Protein</div></div><div class="nut-card"><div class="val">${r.nutrition.carbs||'-'}</div><div class="label">Carbs</div></div><div class="nut-card"><div class="val">${r.nutrition.fat||'-'}</div><div class="label">Fat</div></div></div>`:''}<button class="cook-btn" onclick="startCooking()"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start Cooking · ${r.steps.length} steps</button><div class="translate-row"><select id="translate-lang" class="filter-select" style="flex:1"><option value="">🌐 Translate to…</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="it">Italiano</option><option value="pt">Português</option><option value="ro">Română</option><option value="pl">Polski</option><option value="nl">Nederlands</option><option value="cs">Čeština</option><option value="tr">Türkçe</option><option value="zh">中文</option></select><button class="cook-btn" style="flex:0;padding:12px 20px;font-size:14px" onclick="translateRecipe()">🌐 Translate</button></div><div class="section-label">Preparation</div><div class="steps-preview">${r.steps.map((s,i)=>`<div class="step-preview-item"><span class="step-num">${i+1}</span><span>${esc(s)}</span></div>`).join('')}</div><div class="section-label" id="similar-label" style="display:none">You might also like</div><div class="similar-row" id="similar-row"></div></div>`;
   $('detail-content').scrollTop=0;showView('detail');setTimeout(()=>$('detail-content').scrollTop=0,0);updateFavBtn();if(!skipHash)pushHash(currentRecipe.lang+'/'+slugify(currentRecipe.name));
   $('shop-add-btn').classList.remove('shop-added');$('shop-add-icon').textContent='🛒';
   if(shopItems.some(i=>i.recipe_id===currentRecipe.id)){$('shop-add-btn').classList.add('shop-added');$('shop-add-icon').textContent='✓';}
@@ -575,7 +612,7 @@ function scaleIngredients(factor){
   list.innerHTML=currentRecipe.ingredients.map((ig,i)=>{
     const scaled=scaleText(ig,factor);
     const icon=currentRecipe.ingredient_icons?.[i];
-    return`<li class="ing-item" data-i="${i}"><span class="check-circle">✓</span>${icon?`<img class="ing-icon" src="${icon}" width="28" height="28" onerror="this.style.display='none'">`:'<span class="ing-icon-placeholder"></span>'}<span class="ing-text">${esc(scaled)}</span></li>`;
+    return`<li class="ing-item" data-i="${i}"><span class="check-circle">✓</span>${icon?`<img class="ing-icon" src="${icon}" width="28" height="28" onerror="this.style.display='none'">`:'<span class="ing-icon-placeholder"></span>'}<span class="ing-text">${esc(scaled)}</span><button class="ing-sub" onclick="event.stopPropagation();showSubstitution('${esc(currentRecipe.ingredients[i]).replace(/'/g,"\\'")}',event)" title="Find substitute">🔄</button></li>`;
   }).join('');
   list.onclick=e=>{const li=e.target.closest('.ing-item');if(li)li.classList.toggle('checked');};
 }
@@ -1034,14 +1071,18 @@ async function showSubstitution(ingredient,event){
   // Remove existing popover
   document.querySelector('.sub-popover')?.remove();
   const pop=document.createElement('div');pop.className='sub-popover';
-  pop.innerHTML='⏳ Finding alternatives...';
-  pop.style.top=(event.clientY+10)+'px';pop.style.left=Math.min(event.clientX,window.innerWidth-320)+'px';
+  pop.innerHTML='<div style="text-align:center;padding:8px">⏳ Finding alternatives...</div>';
+  // Position: on mobile center at bottom, on desktop near click
+  if(window.innerWidth<500){pop.style.bottom='20px';pop.style.left='50%';pop.style.transform='translateX(-50%)';pop.style.top='auto';pop.style.width='90%';pop.style.maxWidth='320px';}
+  else{pop.style.top=(event.clientY+10)+'px';pop.style.left=Math.min(event.clientX-100,window.innerWidth-320)+'px';}
   document.body.appendChild(pop);
-  const d=await(await fetch('/api/substitutions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ingredient,context:currentRecipe?.name||''})})).json();
-  if(d.substitutions?.length){
-    pop.innerHTML=d.substitutions.map(s=>`<div class="sub-item"><span class="sub-name">${esc(s.sub)}</span> <span class="sub-ratio">${esc(s.ratio)}</span><div class="sub-note">${esc(s.note)}</div></div>`).join('');
-  }else{pop.innerHTML='No substitutions found.';}
-  setTimeout(()=>{document.addEventListener('click',()=>pop.remove(),{once:true});},100);
+  try{
+    const d=await(await fetch('/api/substitutions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ingredient,context:currentRecipe?.name||''})})).json();
+    if(d.substitutions?.length){
+      pop.innerHTML='<div style="font-weight:600;margin-bottom:6px;font-size:12px;color:var(--text3)">Substitutes for '+esc(ingredient)+'</div>'+d.substitutions.map(s=>`<div class="sub-item"><span class="sub-name">${esc(s.sub)}</span> <span class="sub-ratio">${esc(s.ratio)}</span><div class="sub-note">${esc(s.note)}</div></div>`).join('');
+    }else{pop.innerHTML='No substitutions found.';}
+  }catch(e){pop.innerHTML='Failed to load.';}
+  setTimeout(()=>{document.addEventListener('click',()=>pop.remove(),{once:true});},200);
 }
 
 /* ═══ MANUAL SHOP ADD ═══ */
