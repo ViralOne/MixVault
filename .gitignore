@@ -1,12 +1,30 @@
+# Secrets
 .env
+
+# Database
 data/recipes.db
 data/recipes.db-wal
 data/recipes.db-shm
+
+# Runtime data
 data/logs/
 data/backups/
+*.log
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+
+# OS
 .DS_Store
-.playwright-mcp/
+Thumbs.db
+
+# Build artifacts
 recipes.json
 recipes-html/
+
+# IDE / tools
+.playwright-mcp/
+.vscode/
+.idea/
