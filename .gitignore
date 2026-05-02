@@ -1,4 +1,12 @@
 .env
-.playwright-mcp/
-__pycache__/
 data/recipes.db
+data/recipes.db-wal
+data/recipes.db-shm
+data/logs/
+data/backups/
+__pycache__/
+*.pyc
+.DS_Store
+.playwright-mcp/
+recipes.json
+recipes-html/
