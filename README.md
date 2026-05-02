@@ -74,15 +74,15 @@ LLM_PROVIDER=groq,openrouter,ollama
 
 # Ollama (self-hosted, no API key needed)
 OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=llama3
+OLLAMA_MODEL=qwen3.5
 
 # Groq (free tier, fast)
 GROQ_API_KEY=gsk_...
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=qwen-qwq-32b
 
 # OpenRouter (free tier, many models)
 OPENROUTER_API_KEY=sk-or-...
-OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
+OPENROUTER_MODEL=qwen/qwen3.6-plus:free
 
 # Optional: PIN protection
 AUTH_PIN=1234

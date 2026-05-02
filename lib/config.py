@@ -28,9 +28,9 @@ if _env_path.exists():
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "")  # e.g. http://localhost:11434
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3.5")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "qwen-qwq-32b")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "qwen/qwen3.6-plus:free")
 # LLM_PROVIDER: comma-separated priority order. Options: ollama, groq, openrouter
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq,openrouter,ollama")
 AUTH_PIN = os.environ.get("AUTH_PIN", "")
