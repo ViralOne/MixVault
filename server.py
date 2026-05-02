@@ -32,10 +32,18 @@ if _env_path.exists():
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-AUTH_PIN = os.environ.get("AUTH_PIN", "")  # Set to enable PIN protection
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "")  # e.g. http://localhost:11434
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+# LLM_PROVIDER: comma-separated priority order. Options: ollama, groq, openrouter
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq,openrouter,ollama")
+AUTH_PIN = os.environ.get("AUTH_PIN", "")
+if OLLAMA_URL: log.info(f"Ollama configured ({OLLAMA_URL}, model={OLLAMA_MODEL})")
 if GROQ_API_KEY: log.info(f"Groq API key loaded ({GROQ_API_KEY[:8]}...)")
 if OPENROUTER_API_KEY: log.info(f"OpenRouter API key loaded ({OPENROUTER_API_KEY[:12]}...)")
 if AUTH_PIN: log.info("PIN authentication enabled")
+log.info(f"LLM priority: {LLM_PROVIDER}")
 
 def _mymemory_translate(text, src, tgt):
     """Fallback translator using MyMemory API."""
@@ -84,29 +92,36 @@ _meta_cache = {"data": None, "ts": 0}
 META_CACHE_TTL = 30  # seconds
 
 def _ai_chat(messages, max_tokens=1024):
-    """Call AI with Groq→OpenRouter fallback. Returns response text."""
+    """Call AI using provider priority from LLM_PROVIDER env var."""
     providers = []
-    if GROQ_API_KEY:
-        providers.append(("https://api.groq.com/openai/v1/chat/completions",
-                          GROQ_API_KEY, "llama-3.3-70b-versatile", {}))
-    if OPENROUTER_API_KEY:
-        providers.append(("https://openrouter.ai/api/v1/chat/completions",
-                          OPENROUTER_API_KEY, "meta-llama/llama-3.3-70b-instruct:free",
-                          {"HTTP-Referer": "http://localhost:8080"}))
-    log.info(f"AI: {len(providers)} providers, groq={'yes' if GROQ_API_KEY else 'no'}, or={'yes' if OPENROUTER_API_KEY else 'no'}")
+    for p in LLM_PROVIDER.split(","):
+        p = p.strip().lower()
+        if p == "ollama" and OLLAMA_URL:
+            providers.append(("ollama", f"{OLLAMA_URL.rstrip('/')}/api/chat", "", OLLAMA_MODEL, {}))
+        elif p == "groq" and GROQ_API_KEY:
+            providers.append(("groq", "https://api.groq.com/openai/v1/chat/completions", GROQ_API_KEY, GROQ_MODEL, {}))
+        elif p == "openrouter" and OPENROUTER_API_KEY:
+            providers.append(("openrouter", "https://openrouter.ai/api/v1/chat/completions", OPENROUTER_API_KEY, OPENROUTER_MODEL, {"HTTP-Referer": "http://localhost:8080"}))
     if not providers:
         return None
-    for url, key, model, extra_headers in providers:
+    for name, url, key, model, extra_headers in providers:
         try:
-            body = json.dumps({"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7}).encode()
-            headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "MixVault/1.0"}
-            headers.update(extra_headers)
+            if name == "ollama":
+                # Ollama uses different API format
+                body = json.dumps({"model": model, "messages": messages, "stream": False}).encode()
+                headers = {"Content-Type": "application/json"}
+            else:
+                body = json.dumps({"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7}).encode()
+                headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "MixVault/1.0"}
+                headers.update(extra_headers)
             req = urllib.request.Request(url, data=body, headers=headers)
-            resp = urllib.request.urlopen(req, timeout=30)
+            resp = urllib.request.urlopen(req, timeout=60 if name == "ollama" else 30)
             data = json.loads(resp.read())
+            if name == "ollama":
+                return data["message"]["content"]
             return data["choices"][0]["message"]["content"]
         except Exception as e:
-            log.warning(f"AI provider {url} failed: {e}")
+            log.warning(f"AI provider {name} failed: {e}")
             continue
     return None
 DB_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent / "data" / "recipes.db"))
