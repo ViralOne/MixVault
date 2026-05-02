@@ -59,16 +59,29 @@ No dependencies required — stdlib only (Python 3.10+).
 
 ## Configuration
 
-Create a `.env` file:
+Create a `.env` file (see `.env.example`):
 
 ```env
-# Optional: AI search + recipe creator (at least one recommended)
+# LLM provider priority (comma-separated): ollama, groq, openrouter
+LLM_PROVIDER=groq,openrouter,ollama
+
+# Ollama (self-hosted, no API key needed)
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3
+
+# Groq (free tier, fast)
 GROQ_API_KEY=gsk_...
+GROQ_MODEL=llama-3.3-70b-versatile
+
+# OpenRouter (free tier, many models)
 OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
 
 # Optional: PIN protection
 AUTH_PIN=1234
 ```
+
+Only configure the providers you want to use. The app tries them in `LLM_PROVIDER` order and falls through on failure.
 
 ## Architecture
 
