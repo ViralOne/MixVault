@@ -1,0 +1,14 @@
+.git
+__pycache__
+*.pyc
+recipes.db
+recipes.db-wal
+recipes.db-shm
+recipes.json
+recipes-html/
+data/
+backups/
+logs/
+.DS_Store
+.env
+server.log
