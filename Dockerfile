@@ -4,6 +4,7 @@ WORKDIR /app
 
 # No external dependencies needed - stdlib only
 COPY server.py .
+COPY lib/ lib/
 COPY static/ static/
 
 # Create dirs for data
