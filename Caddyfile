@@ -1,0 +1,30 @@
+# Caddyfile for MixVault Cooker
+# Replace 'cooker.yourdomain.com' with your actual domain
+# For Tailscale: use your tailnet hostname like 'cooker.tail1234.ts.net'
+
+cooker.yourdomain.com {
+    reverse_proxy cooker:8080
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    # Gzip
+    encode gzip
+
+    # Logging
+    log {
+        output file /data/access.log
+        format console
+    }
+}
+
+# If using without a domain (local IP only), use:
+# :443 {
+#     tls internal
+#     reverse_proxy cooker:8080
+# }
