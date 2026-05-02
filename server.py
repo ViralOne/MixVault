@@ -872,6 +872,160 @@ No explanation, just the JSON."""},
         
         self._json({"images": images})
 
+    # ═══ COOKIDOO URL IMPORT ═══
+    def _cookidoo_import(self, req):
+        """Scrape Cookidoo URL for public data, AI-generate steps, save."""
+        url = req.get("url", "").strip()
+        if not url or "cookidoo" not in url:
+            return self._json({"error": "Invalid Cookidoo URL"}, 400)
+        # Scrape public data
+        try:
+            ureq = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            html = urllib.request.urlopen(ureq, timeout=15).read().decode()
+        except Exception as e:
+            return self._json({"error": f"Failed to fetch: {e}"}, 500)
+        import html as html_mod
+        m = re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL)
+        if not m:
+            return self._json({"error": "No recipe data found on page"}, 404)
+        try:
+            data = json.loads(m.group(1))
+        except:
+            return self._json({"error": "Failed to parse recipe data"}, 500)
+        name = html_mod.unescape(data.get("name", ""))
+        ingredients = [html_mod.unescape(i) for i in data.get("recipeIngredient", [])]
+        image = data.get("image", "")
+        total_time = data.get("totalTime", "")
+        yld = data.get("recipeYield", "")
+        nutrition = data.get("nutrition", {})
+        categories = data.get("recipeCategory", [])
+        keywords = data.get("keywords", "")
+        lang = data.get("inLanguage", "en")[:2]
+        if not name or not ingredients:
+            return self._json({"error": "Recipe has no name or ingredients"}, 400)
+        # Check if already exists
+        db = get_db()
+        existing = db.execute("SELECT id FROM recipes WHERE name=? AND lang=?", [name, lang]).fetchone()
+        if existing:
+            return self._json({"id": existing[0], "exists": True, "name": name})
+        # AI-generate steps
+        steps = []
+        ing_text = "\n".join(f"- {i}" for i in ingredients)
+        messages = [
+            {"role": "system", "content": f"You are a chef. Generate detailed cooking steps for this recipe. Include temperatures, times, and visual cues. Output ONLY a JSON array of step strings. Language: {lang}"},
+            {"role": "user", "content": f"Recipe: {name}\nYield: {yld}\nTime: {total_time}\nIngredients:\n{ing_text}"}
+        ]
+        ai_result = _ai_chat(messages, max_tokens=1024)
+        if ai_result:
+            try:
+                # Extract JSON array from response
+                arr_m = re.search(r'\[.*\]', ai_result, re.DOTALL)
+                if arr_m:
+                    steps = json.loads(arr_m.group())
+            except:
+                steps = [s.strip() for s in ai_result.split("\n") if s.strip() and not s.strip().startswith("{")]
+        if not steps:
+            steps = ["Follow standard preparation method for this recipe."]
+        # Save
+        rid = hashlib.md5(f"{name}:{lang}".encode()).hexdigest()[:12]
+        nut = {"calories": nutrition.get("calories",""), "protein": nutrition.get("proteinContent",""),
+               "carbs": nutrition.get("carbohydrateContent",""), "fat": nutrition.get("fatContent","")}
+        db.execute(
+            "INSERT OR IGNORE INTO recipes(id,name,country,lang,collection,image,total_time,yield,categories,ingredients,steps,nutrition,keywords) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (rid, name, "Imported", lang, "Cookidoo Import", image, total_time, yld,
+             json.dumps(categories, ensure_ascii=False), json.dumps(ingredients, ensure_ascii=False),
+             json.dumps(steps, ensure_ascii=False), json.dumps(nut, ensure_ascii=False), keywords))
+        db.execute("INSERT OR IGNORE INTO recipes_fts(id,name,ingredients,keywords,collection,categories) VALUES(?,?,?,?,?,?)",
+            (rid, name, json.dumps(ingredients, ensure_ascii=False), keywords, "Cookidoo Import", json.dumps(categories, ensure_ascii=False)))
+        db.commit()
+        _meta_cache["ts"] = 0
+        self._json({"id": rid, "exists": False, "name": name, "steps_generated": len(steps)})
+
+    # ═══ SHARE RECIPE ═══
+    def _share_recipe(self, rid):
+        """Generate a standalone HTML page for sharing."""
+        db = get_db()
+        row = db.execute("SELECT * FROM recipes WHERE id=?", [rid]).fetchone()
+        if not row:
+            return self._json({"error": "not found"}, 404)
+        r = full_row(row)
+        ings_html = "".join(f"<li>{i}</li>" for i in r["ingredients"])
+        steps_html = "".join(f"<li>{s}</li>" for i, s in enumerate(r["steps"]))
+        nut_html = ""
+        if r["nutrition"].get("calories"):
+            nut_html = f'<p class="nut">{r["nutrition"]["calories"]} · {r["nutrition"].get("protein","")} protein · {r["nutrition"].get("carbs","")} carbs · {r["nutrition"].get("fat","")} fat</p>'
+        html_page = f'''<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{r["name"]} - MixVault</title>
+<style>*{{margin:0;padding:0;box-sizing:border-box}}body{{font-family:system-ui,sans-serif;max-width:640px;margin:0 auto;padding:20px;color:#1a1a1a}}
+img{{width:100%;border-radius:12px;margin-bottom:16px}}h1{{font-size:24px;margin-bottom:8px}}
+.meta{{color:#666;margin-bottom:16px;font-size:14px}}.nut{{background:#f1f8e9;padding:10px;border-radius:8px;font-size:13px;margin-bottom:16px}}
+h2{{font-size:16px;color:#2e7d32;margin:20px 0 8px}}ul,ol{{padding-left:20px}}li{{margin-bottom:8px;line-height:1.5}}
+.footer{{margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#999;text-align:center}}</style></head>
+<body>{"<img src='" + r["image"] + "'>" if r["image"] else ""}
+<h1>{r["name"]}</h1><p class="meta">{r.get("yield","")} · {r["country"]}</p>{nut_html}
+<h2>Ingredients</h2><ul>{ings_html}</ul>
+<h2>Steps</h2><ol>{steps_html}</ol>
+<div class="footer">Shared from MixVault</div></body></html>'''
+        body = html_page.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Content-Length", len(body))
+        self.end_headers()
+        self.wfile.write(body)
+
+    # ═══ NUTRITIONAL GOALS FILTER ═══
+    def _nutrition_search(self, params):
+        """Filter recipes by nutritional values."""
+        db = get_db()
+        max_cal = params.get("max_calories", [""])[0]
+        min_protein = params.get("min_protein", [""])[0]
+        max_carbs = params.get("max_carbs", [""])[0]
+        max_fat = params.get("max_fat", [""])[0]
+        lang = params.get("lang", [""])[0]
+        limit = min(int(params.get("limit", ["30"])[0]), 100)
+        # SQLite JSON extraction on nutrition field
+        wheres = ["json_extract(r.nutrition, '$.calories') != ''"]
+        args = []
+        if max_cal:
+            wheres.append("CAST(REPLACE(json_extract(r.nutrition, '$.calories'), ' kcal', '') AS REAL) <= ?")
+            args.append(float(max_cal))
+        if min_protein:
+            wheres.append("CAST(REPLACE(REPLACE(json_extract(r.nutrition, '$.protein'), ' g', ''), ',', '.') AS REAL) >= ?")
+            args.append(float(min_protein))
+        if max_carbs:
+            wheres.append("CAST(REPLACE(REPLACE(json_extract(r.nutrition, '$.carbs'), ' g', ''), ',', '.') AS REAL) <= ?")
+            args.append(float(max_carbs))
+        if max_fat:
+            wheres.append("CAST(REPLACE(REPLACE(json_extract(r.nutrition, '$.fat'), ' g', ''), ',', '.') AS REAL) <= ?")
+            args.append(float(max_fat))
+        if lang:
+            wheres.append("r.lang=?")
+            args.append(lang)
+        where_sql = " AND ".join(wheres)
+        rows = db.execute(f"SELECT r.* FROM recipes r WHERE {where_sql} LIMIT ?", args + [limit]).fetchall()
+        self._json({"total": len(rows), "recipes": slim_rows(rows)})
+
+    # ═══ SUBSTITUTION SUGGESTIONS ═══
+    def _substitutions(self, req):
+        """AI-powered ingredient substitution suggestions."""
+        ingredient = req.get("ingredient", "").strip()
+        context = req.get("context", "")  # recipe name or dietary need
+        if not ingredient:
+            return self._json({"error": "no ingredient"}, 400)
+        messages = [
+            {"role": "system", "content": "You are a cooking expert. Suggest 3-5 substitutions for the given ingredient. Consider flavor, texture, and cooking properties. Reply ONLY with a JSON array: [{\"sub\":\"substitute name\",\"ratio\":\"conversion ratio\",\"note\":\"brief note\"}]"},
+            {"role": "user", "content": f"Ingredient: {ingredient}" + (f"\nRecipe context: {context}" if context else "")}
+        ]
+        result = _ai_chat(messages, max_tokens=300)
+        if not result:
+            return self._json({"error": "AI unavailable"}, 503)
+        try:
+            arr_m = re.search(r'\[.*\]', result, re.DOTALL)
+            subs = json.loads(arr_m.group()) if arr_m else []
+        except:
+            subs = []
+        self._json({"ingredient": ingredient, "substitutions": subs})
+
     def log_message(self, fmt, *args):
         log.info(f"{self.client_address[0]} {fmt % args}")
 
@@ -1050,6 +1204,10 @@ def _authed_do_GET(self):
         return self._health(parse_qs(p.query))
     if p.path == "/api/cooking-state":
         return self._cooking_state_get(parse_qs(p.query))
+    if p.path.startswith("/api/share/"):
+        return self._share_recipe(unquote(p.path[11:]))
+    if p.path == "/api/nutrition":
+        return self._nutrition_search(parse_qs(p.query))
     return _orig_do_GET(self)
 
 def _authed_do_POST(self):
@@ -1107,6 +1265,22 @@ def _authed_do_POST(self):
         try: req = json.loads(body) if body else {}
         except: req = {}
         return self._ai_image_search(req)
+    if p.path == "/api/import/cookidoo":
+        content_len = int(self.headers.get("Content-Length", 0))
+        if content_len > MAX_BODY_SIZE:
+            return self.send_error(413)
+        body = self.rfile.read(content_len)
+        try: req = json.loads(body) if body else {}
+        except: req = {}
+        return self._cookidoo_import(req)
+    if p.path == "/api/substitutions":
+        content_len = int(self.headers.get("Content-Length", 0))
+        if content_len > MAX_BODY_SIZE:
+            return self.send_error(413)
+        body = self.rfile.read(content_len)
+        try: req = json.loads(body) if body else {}
+        except: req = {}
+        return self._substitutions(req)
     return _orig_do_POST(self)
 
 Handler.do_GET = _authed_do_GET
