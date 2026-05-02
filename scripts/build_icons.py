@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Extract ingredient icon mappings from recipe HTML files and store in DB."""
-import re, json, sqlite3
+import re, json, sqlite3, sys
 from pathlib import Path
 from collections import Counter
 
-HTML_DIR = Path("/recipies")
-DB_PATH = Path(__file__).parent / "recipes.db"
+HTML_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+DB_PATH = Path(__file__).parent.parent / "data" / "recipes.db"
+
+if not HTML_DIR:
+    print("Usage: python3 build_icons.py /path/to/html-folder", file=sys.stderr)
+    sys.exit(1)
 
 def extract_icons():
     """Extract ingredient name → icon ID mappings from all HTML files."""

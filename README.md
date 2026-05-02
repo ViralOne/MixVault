@@ -107,6 +107,35 @@ Automated hourly backups (keeps last 3) in `./data/backups/`. Manual backup:
 ./backup.sh
 ```
 
+## Building the Database
+
+The database is built from recipe HTML files. To generate it:
+
+1. **Obtain recipe HTML files** — Search for "Recipes after TM7 UI" archives online. These contain recipe pages organized by country and collection.
+
+2. **Run the build script:**
+   ```bash
+   ./scripts/build.sh /path/to/recipe-html-folder
+   ```
+
+   This will parse HTML → build SQLite DB → extract ingredient icons → place `recipes.db` in `data/`.
+
+3. **Start the app:**
+   ```bash
+   docker compose up -d --build
+   ```
+
+The HTML files should be organized as:
+```
+Recipe Folder/
+├── Country/
+│   ├── Collection/
+│   │   ├── Recipe Name.html
+│   │   └── ...
+```
+
+Each HTML file contains structured recipe data (JSON-LD schema + ingredient icons) that the scripts extract automatically.
+
 ## Reverse Proxy (HTTPS)
 
 Edit `Caddyfile` with your domain, then uncomment the Caddy service in `docker-compose.yml`.

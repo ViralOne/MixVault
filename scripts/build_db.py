@@ -3,8 +3,8 @@
 import html, json, sqlite3
 from pathlib import Path
 
-DB = Path(__file__).parent / "recipes.db"
-SRC = Path(__file__).parent / "recipes.json"
+DB = Path(__file__).parent.parent / "data" / "recipes.db"
+SRC = Path(__file__).parent.parent / "recipes.json"
 
 def ue(v):
     """html.unescape for str or list-of-str."""
