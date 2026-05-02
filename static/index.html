@@ -552,7 +552,7 @@ async function doAISearch(){const q=$('search').value.trim();if(!q||loading)retu
   renderRecipes(d.recipes,true);}catch(e){$('result-info').innerHTML='<strong>AI search failed</strong>';$('recipes').innerHTML='';}loading=false;}
 $('recipes-wrap').addEventListener('scroll',function(){if(!loading&&searchOffset<searchTotal&&this.scrollTop+this.clientHeight>=this.scrollHeight-400)doSearch(false);$('back-top').classList.toggle('show',this.scrollTop>400);});
 function updateFilterStyles(){['filter-country','filter-lang'].forEach(id=>$(id).classList.toggle('has-value',$(id).value!==''));$('clear-btn').classList.toggle('show',$('filter-country').value||$('filter-lang').value||favFilterOn||nutFilterOn);}
-function clearFilters(){$('filter-country').value='';$('filter-lang').value='';favFilterOn=false;nutFilterOn=false;$('filter-fav').classList.remove('active');$('filter-fav').textContent='♡ Favorites';$('filter-nut').classList.remove('active');$('filter-history').classList.remove('active');$('nut-filter').classList.remove('open');$('nut-cal').value='';$('nut-prot').value='';$('nut-carbs').value='';$('nut-fat').value='';updateFilterStyles();doSearch(true);}
+function clearFilters(){$('filter-country').value='';$('filter-lang').value='';favFilterOn=false;nutFilterOn=false;historyOn=false;$('filter-fav').classList.remove('active');$('filter-fav').textContent='♡ Favorites';$('filter-nut').classList.remove('active');$('filter-history').classList.remove('active');$('nut-filter').classList.remove('open');$('nut-cal').value='';$('nut-prot').value='';$('nut-carbs').value='';$('nut-fat').value='';updateFilterStyles();doSearch(true);}
 function toggleFavFilter(){favFilterOn=!favFilterOn;$('filter-fav').classList.toggle('active',favFilterOn);$('filter-fav').textContent=favFilterOn?'♥ Favorites':'♡ Favorites';doSearch(true);}
 
 /* ═══ NUTRITION FILTER ═══ */
@@ -560,9 +560,11 @@ let nutFilterOn=false;
 function toggleNutFilter(){nutFilterOn=!nutFilterOn;$('nut-filter').classList.toggle('open',nutFilterOn);$('filter-nut').classList.toggle('active',nutFilterOn);if(!nutFilterOn)doSearch(true);}
 
 /* ═══ COOKING HISTORY ═══ */
+let historyOn=false;
 async function showCookingHistory(){
+  historyOn=!historyOn;$('filter-history').classList.toggle('active',historyOn);
+  if(!historyOn){doSearch(true);return;}
   if(loading)return;loading=true;showSkeleton();
-  $('filter-history').classList.add('active');
   const d=await(await fetch('/api/history')).json();
   const recipes=(d.history||[]).map(h=>h.recipe);
   searchTotal=recipes.length;searchOffset=recipes.length;
