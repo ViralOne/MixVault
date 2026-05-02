@@ -24,7 +24,10 @@ A self-hosted recipe manager with 70,000+ recipes, AI-powered search, AI recipe 
 ### Docker (recommended)
 
 ```bash
-# Place your recipes.db in ./data/
+# Download the recipe database
+./scripts/download-db.sh
+
+# Start the app
 docker compose up -d --build
 ```
 
