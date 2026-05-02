@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Parse ALL Recipies HTML recipe files into a single JSON database.
-Reads from the original Downloads folder, tags each recipe with country."""
-import json, re, hashlib
+"""Parse recipe HTML files into JSON. Usage: python3 parse_recipes.py /path/to/html-folder > recipes.json"""
+import json, re, hashlib, sys
 from pathlib import Path
 
-SOURCE = Path.home() / "Downloads" / "recipies"
-OUT = Path(__file__).parent / "recipes.json"
+SOURCE = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+
+if not SOURCE:
+    print("Usage: python3 parse_recipes.py /path/to/html-folder", file=sys.stderr)
+    sys.exit(1)
 
 COUNTRY_LANG = {
     "Argentina": "es", "Australia": "en", "Austria": "de", "Belgium": "fr",
@@ -79,6 +81,9 @@ def parse_file(path: Path, country: str, collection: str) -> dict | None:
     }
 
 def main():
+    if not SOURCE.exists():
+        print(f"Error: {SOURCE} not found", file=sys.stderr)
+        sys.exit(1)
     recipes = []
     countries = sorted(d for d in SOURCE.iterdir() if d.is_dir())
     for ci, country_dir in enumerate(countries):
@@ -91,12 +96,9 @@ def main():
                 if r:
                     recipes.append(r)
                     count += 1
-        print(f"[{ci+1}/{len(countries)}] {country}: {count} recipes")
-    OUT.write_text(json.dumps(recipes, ensure_ascii=False))
-    print(f"\nTotal: {len(recipes)} recipes -> {OUT}")
-    # Print size
-    mb = OUT.stat().st_size / 1024 / 1024
-    print(f"File size: {mb:.1f} MB")
+        print(f"[{ci+1}/{len(countries)}] {country}: {count} recipes", file=sys.stderr)
+    print(json.dumps(recipes, ensure_ascii=False))
+    print(f"\nTotal: {len(recipes)} recipes", file=sys.stderr)
 
 if __name__ == "__main__":
     main()
