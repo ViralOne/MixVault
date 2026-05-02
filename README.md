@@ -7,13 +7,17 @@ A self-hosted recipe manager with 70,000+ recipes, AI-powered search, AI recipe 
 - **Full-text search** across recipes in 22 languages
 - **AI search** — describe what you want to cook in natural language
 - **AI recipe creator** — chat with AI to generate recipes, find images, save to DB
+- **Cookidoo URL import** — paste a URL, auto-import ingredients + AI-generate steps
 - **Guided cooking mode** — step-by-step with timers, temperature, and speed indicators
 - **Multi-device sync** — resume cooking from any device (continue cooking banner)
 - **Shopping list** — add ingredients, merge duplicates by quantity, export to CSV, undo clear
 - **Serving scaler** — adjust quantities (×½, ×1, ×2, ×3)
 - **Translation** — translate any recipe between supported languages (Google + MyMemory fallback)
 - **Ingredient icons** — 55K ingredient-to-icon mappings
+- **Ingredient substitutions** — AI-powered alternatives for any ingredient
+- **Nutrition filter** — filter recipes by calories, protein, carbs, fat
 - **Recipe edit/delete** — modify or remove any recipe
+- **Recipe sharing** — shareable standalone recipe page link
 - **Favorites, notes, cooking history**
 - **Recently viewed** — quick access to last viewed recipes
 - **PIN authentication** — optional access protection
