@@ -564,7 +564,7 @@ async function init(){
   $('filter-country').onchange=$('filter-lang').onchange=()=>{$('search').value='';doSearch(true);};
   if(localStorage.getItem('dark')==='1')document.documentElement.classList.add('dark');
   updateDarkIcon();doSearch(true);initShopBadge();loadRecentlyViewed();checkCookingBanner();
-  if('Notification' in window && Notification.permission==='default'){Notification.requestPermission();}
+  if('Notification' in window && Notification.permission==='default'){/* request on user action */}
   loadCookAgain();loadTagFilter();
   // Restore from saved cooking state or handle current hash
   if(location.hash&&location.hash.length>2){handleHash();}
@@ -760,7 +760,7 @@ function parseStep(txt){
   return{temp:temp?+temp:0,speed:speed?+speed:0,secs,weight:weightM?+weightM[1]:0,isPour,isChop,isCook};
 }
 let lastDir=1;
-function startCooking(){if(!currentRecipe)return;currentStep=0;$('cooking-title').textContent=currentRecipe.name;lastDir=1;renderStep();showView('cooking');requestWake();pushHash('cook/'+currentRecipe.id+'/'+currentStep);saveCookState();}
+function startCooking(){if(!currentRecipe)return;if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();currentStep=0;$('cooking-title').textContent=currentRecipe.name;lastDir=1;renderStep();showView('cooking');requestWake();pushHash('cook/'+currentRecipe.id+'/'+currentStep);saveCookState();}
 function exitCooking(){clearInterval(stepTimer);showView('detail');localStorage.removeItem('cookState');}
 function stepNav(dir){
   const steps=currentRecipe.steps;
