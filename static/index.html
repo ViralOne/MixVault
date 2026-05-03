@@ -442,7 +442,7 @@ html.dark .tag-pill{background:#1b3320}
     </div>
     <div class="result-info" id="result-info"></div>
   </div>
-  <div class="recipes-wrap" id="recipes-wrap"><div class="continue-banner" id="continue-banner" style="display:none" onclick="resumeCooking()"><span class="cb-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></span><div class="cb-text"><div class="cb-title" id="cb-title">Continue cooking</div><div class="cb-sub" id="cb-sub"></div></div><button class="cb-dismiss" onclick="event.stopPropagation();dismissCooking()" title="Dismiss">×</button></div><div class="recent-section" id="recent-section" style="display:none"><div class="section-title">Recently Viewed</div><div class="recent-row" id="recent-row"></div></div><div class="cook-again-section" id="cook-again-section" style="display:none"><div class="section-title">Cook Again</div><div class="recent-row" id="cook-again-row"></div></div><div class="recipes" id="recipes"></div></div>
+  <div class="recipes-wrap" id="recipes-wrap"><div class="continue-banner" id="continue-banner" style="display:none" onclick="resumeCooking()"><span class="cb-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></span><div class="cb-text"><div class="cb-title" id="cb-title">Continue cooking</div><div class="cb-sub" id="cb-sub"></div></div><button class="cb-dismiss" onclick="event.stopPropagation();dismissCooking()" title="Dismiss">×</button></div><div class="recent-section" id="recent-section" style="display:none"><div class="section-title">Recently Cooked</div><div class="recent-row" id="recent-row"></div></div><div class="cook-again-section" id="cook-again-section" style="display:none"><div class="section-title">Cook Again</div><div class="recent-row" id="cook-again-row"></div></div><div class="recipes" id="recipes"></div></div>
   <button class="back-top" id="back-top" onclick="$('recipes-wrap').scrollTo({top:0})" aria-label="Back to top"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg></button>
 </div>
 <!-- ═══ DETAIL ═══ -->
@@ -605,6 +605,7 @@ function toggleNutFilter(){nutFilterOn=!nutFilterOn;$('nut-filter').classList.to
 let historyOn=false;
 async function showCookingHistory(){
   historyOn=!historyOn;$('filter-history').classList.toggle('active',historyOn);
+  $('recent-section').style.display=historyOn?'none':'';
   if(!historyOn){doSearch(true);return;}
   if(loading)return;loading=true;showSkeleton();
   const d=await(await fetch('/api/history')).json();
@@ -764,7 +765,7 @@ function startCooking(){if(!currentRecipe)return;if('Notification' in window&&No
 function exitCooking(){clearInterval(stepTimer);showView('detail');localStorage.removeItem('cookState');}
 function stepNav(dir){
   const steps=currentRecipe.steps;
-  if(currentStep>=steps.length&&dir>0){exitCooking();return;}
+  if(currentStep>=steps.length&&dir>0){if(!currentRecipe._logged){currentRecipe._logged=true;fetch('/api/cooked/'+encodeURIComponent(currentRecipe.id),{method:'POST'});}exitCooking();return;}
   clearInterval(stepTimer);lastDir=dir;
   currentStep=Math.max(0,currentStep+dir);
   try{navigator.vibrate(50)}catch(e){}
@@ -774,7 +775,7 @@ function renderStep(){
   const steps=currentRecipe.steps,total=steps.length;
   $('progress-bar').innerHTML=steps.map((_,i)=>`<div class="progress-seg${i<currentStep?' done':''}${i===currentStep?' active':''}"></div>`).join('');
   const pct=total>0?(currentStep/total):0,circ=2*Math.PI*54,offset=circ-(circ*pct);
-  if(currentStep>=total){renderDone();clearCookState();setTimeout(exitCooking,3000);return;}
+  if(currentStep>=total){renderDone();clearCookState();if(!currentRecipe._logged){currentRecipe._logged=true;fetch('/api/cooked/'+encodeURIComponent(currentRecipe.id),{method:'POST'});}setTimeout(exitCooking,3000);return;}
   const meta=parseStep(steps[currentStep]);
   const bladeSpeed=meta.isChop?'0.8s':meta.isCook?'4s':'2s';
   const slideClass=lastDir>=0?'slide-left':'slide-right';
