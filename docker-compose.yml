@@ -4,7 +4,7 @@ services:
     container_name: mixvault
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8039:8080"
     volumes:
       - ./data:/data
     env_file:
@@ -14,7 +14,7 @@ services:
       - LOG_DIR=/data/logs
       - BACKUP_DIR=/data/backups
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/poll')"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8039/api/poll')"]
       interval: 30s
       timeout: 5s
       retries: 3
