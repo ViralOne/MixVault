@@ -123,6 +123,14 @@ def _restore(self, req):
     db.commit()
     self._json({"ok": True})
 
+def _tags_list(self, params=None):
+    """All distinct tags with usage counts, for the browse filter."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT tag, count(*) AS n FROM recipe_tags GROUP BY tag ORDER BY n DESC, tag"
+    ).fetchall()
+    self._json({"tags": [{"tag": r["tag"], "count": r["n"]} for r in rows]})
+
 def _tags_get(self, rid):
     db = get_db()
     rows = db.execute("SELECT tag FROM recipe_tags WHERE recipe_id=?", [rid]).fetchall()

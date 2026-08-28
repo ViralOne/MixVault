@@ -1,0 +1,203 @@
+/* ═══ DETAIL VIEW ═══ */
+.detail-header {
+  background: rgba(255, 255, 255, .85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  padding: 12px 16px; display: flex; align-items: center; gap: 12px;
+  border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; transition: background .3s;
+}
+html.dark .detail-header { background: rgba(30, 30, 30, .88) }
+.detail-header h1 { font-size: 16px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+
+.btn-back {
+  width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--border);
+  background: var(--card); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all .15s; flex-shrink: 0; color: var(--text);
+}
+.btn-back:hover { background: var(--green-light); border-color: var(--green) }
+
+.fav-btn {
+  width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--border);
+  background: var(--card); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 18px; transition: all .2s; flex-shrink: 0; color: var(--text2);
+}
+.fav-btn:hover { border-color: var(--red); color: var(--red) }
+.fav-btn.active { background: #fef2f2; border-color: var(--red); color: var(--red) }
+html.dark .fav-btn.active { background: #3a1a1a }
+.fav-btn.active .heart { animation: heartPop .3s ease }
+@keyframes heartPop { 0% { transform: scale(1) } 50% { transform: scale(1.3) } 100% { transform: scale(1) } }
+
+.detail-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; scroll-behavior: smooth }
+.hero-wrap { position: relative; overflow: hidden; max-height: 320px }
+.hero-img { width: 100%; max-height: 320px; object-fit: cover; transition: transform .3s; transform-origin: center }
+.detail-body { max-width: 640px; margin: 0 auto; padding: 24px 20px 40px }
+.detail-body h2 { font-size: 26px; font-weight: 700; line-height: 1.2; margin-bottom: 10px; letter-spacing: -.02em }
+
+.meta-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px }
+.meta-pill {
+  display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text2);
+  background: var(--bg); padding: 7px 14px; border-radius: 20px; font-weight: 500;
+  transition: background .3s; border: 1px solid var(--border);
+}
+.meta-pill svg { width: 16px; height: 16px; color: var(--green) }
+.meta-pill.diff-badge { border: none; text-transform: uppercase }
+.meta-pill.diff-easy { background: #e8f5e9; color: #2e7d32 }
+.meta-pill.diff-medium { background: #fff3e0; color: #e65100 }
+.meta-pill.diff-hard { background: #ffebee; color: #c62828 }
+
+.section-label {
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--green); margin: 28px 0 12px;
+}
+
+/* Tags */
+.tags-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; align-items: center }
+.tag-pill {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 16px;
+  font-size: 12px; font-weight: 500; background: var(--green-light); color: var(--green-dark);
+  border: 1px solid var(--green); cursor: default;
+}
+.tag-pill .tag-x { cursor: pointer; opacity: .6; font-size: 14px; line-height: 1; background: none; border: none; color: inherit }
+.tag-pill .tag-x:hover { opacity: 1 }
+.tag-add-btn {
+  width: 26px; height: 26px; border-radius: 50%; border: 1.5px dashed var(--border);
+  background: none; color: var(--text3); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .15s;
+}
+.tag-add-btn:hover { border-color: var(--green); color: var(--green) }
+
+/* Serving scaler */
+.scaler-row { display: flex; gap: 6px; margin-bottom: 12px }
+.scaler-btn {
+  padding: 6px 14px; border: 1.5px solid var(--border); border-radius: 16px; font-size: 13px;
+  font-weight: 600; background: var(--card); color: var(--text2); cursor: pointer;
+  font-family: inherit; transition: all .15s;
+}
+.scaler-btn.active { background: var(--green); border-color: var(--green); color: #fff }
+.scaler-btn:hover:not(.active) { border-color: var(--green); color: var(--green) }
+
+/* Ingredients */
+.shop-add-inline {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;
+  border: 1.5px solid var(--border); border-radius: 20px; font-size: 13px; font-weight: 500;
+  background: var(--card); color: var(--text2); cursor: pointer; font-family: inherit;
+  transition: all .15s; margin-bottom: 12px;
+}
+.shop-add-inline:hover { border-color: var(--green); color: var(--green) }
+.shop-add-inline.added { background: var(--green-light); border-color: var(--green); color: var(--green) }
+.ing-list { list-style: none }
+.ing-item {
+  padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 14px; line-height: 1.5;
+  display: flex; align-items: center; gap: 12px; cursor: pointer; transition: opacity .2s; user-select: none;
+}
+.ing-item .check-circle {
+  width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; transition: all .2s;
+  font-size: 12px; color: transparent;
+}
+.ing-item.checked .check-circle { background: var(--green); border-color: var(--green); color: #fff }
+.ing-item.checked .ing-text { text-decoration: line-through; opacity: .4 }
+.ing-item .ing-icon { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; object-fit: contain }
+.ing-item .ing-icon-placeholder { width: 28px; height: 28px; flex-shrink: 0 }
+.ing-item .ing-text { flex: 1 }
+.ing-item .ing-sub {
+  width: 24px; height: 24px; border: none; background: none; color: var(--text3); cursor: pointer;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-left: auto; transition: all .15s;
+}
+.ing-item .ing-sub:hover { color: var(--green); background: var(--green-light) }
+
+/* Nutrition */
+.nutrition-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px }
+.nut-card { text-align: center; background: var(--green-50); padding: 12px 8px; border-radius: var(--radius-sm); transition: background .3s }
+.nut-card .val { font-size: 16px; font-weight: 700; color: var(--green-dark) }
+html.dark .nut-card .val { color: #81c784 }
+.nut-card .label { font-size: 11px; color: var(--text2); margin-top: 2px }
+
+/* Actions */
+.cook-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+  padding: 16px; margin: 28px 0 12px; background: var(--green); color: #fff; border: none;
+  border-radius: var(--radius); font-size: 16px; font-weight: 600; cursor: pointer;
+  box-shadow: var(--shadow-lg); transition: background .2s, transform .1s;
+}
+.cook-btn:hover { background: var(--green-dark) }
+.cook-btn:active { transform: scale(.98) }
+.cook-btn svg { width: 22px; height: 22px }
+.translate-row { display: flex; gap: 8px; align-items: center; margin: 0 0 16px }
+.translate-row .cook-btn { flex: 0 0 auto; width: auto; margin: 0; padding: 12px 20px; font-size: 14px }
+.translate-spinner {
+  display: inline-block; width: 16px; height: 16px; border: 2px solid #fff;
+  border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite;
+  vertical-align: middle; margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg) } }
+
+/* Steps preview */
+.step-preview-item {
+  padding: 14px 4px; border-bottom: 1px solid var(--border); font-size: 14px; line-height: 1.6;
+  display: flex; gap: 12px; transition: background .15s; border-radius: 8px;
+}
+.step-preview-item:hover { background: var(--green-50) }
+.step-num {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--green-light); color: var(--green);
+  font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.step-preview-item .sp-mode {
+  margin-left: auto; flex-shrink: 0; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--text3); align-self: flex-start; padding-top: 6px;
+}
+
+/* Similar */
+.similar-row {
+  display: flex; gap: 12px; overflow-x: auto; padding: 4px 0 12px;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.similar-row::-webkit-scrollbar { display: none }
+.similar-card {
+  flex-shrink: 0; width: 160px; border-radius: 12px; overflow: hidden; background: var(--card);
+  box-shadow: var(--shadow); cursor: pointer; border: none; padding: 0; text-align: left;
+  color: inherit; font-family: inherit; transition: transform .2s, box-shadow .2s;
+}
+.similar-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg) }
+.similar-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover }
+.similar-card .sc-name {
+  padding: 8px; font-size: 12px; font-weight: 600; line-height: 1.3; min-height: 40px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* Notes */
+.note-input {
+  width: 100%; padding: 12px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 14px; font-family: inherit; background: var(--bg); color: var(--text); outline: none;
+  resize: vertical; min-height: 60px; transition: border .2s;
+}
+.note-input:focus { border-color: var(--green) }
+
+/* Edit form */
+.edit-form { padding: 20px; max-width: 640px; margin: 0 auto }
+.edit-form h2 { margin-bottom: 16px }
+.edit-form label { font-size: 12px; font-weight: 600; color: var(--text2) }
+.edit-form input, .edit-form textarea {
+  width: 100%; padding: 10px; border: 1.5px solid var(--border); border-radius: 10px;
+  margin: 4px 0 12px; font-size: 14px; font-family: inherit; background: var(--bg);
+  color: var(--text); resize: vertical; outline: none;
+}
+.edit-form input:focus, .edit-form textarea:focus { border-color: var(--green) }
+.edit-form .save {
+  width: 100%; padding: 14px; background: var(--green); color: #fff; border: none;
+  border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 8px;
+}
+
+/* Substitution popover */
+.sub-popover {
+  position: fixed; background: var(--card); border: 1.5px solid var(--border); border-radius: 12px;
+  padding: 12px; box-shadow: var(--shadow-lg); z-index: 100; max-width: 300px; font-size: 13px;
+}
+.sub-popover .sub-head { font-weight: 600; margin-bottom: 6px; font-size: 12px; color: var(--text3) }
+.sub-popover .sub-item { padding: 6px 0; border-bottom: 1px solid var(--border) }
+.sub-popover .sub-item:last-child { border: none }
+.sub-popover .sub-name { font-weight: 600 }
+.sub-popover .sub-ratio { color: var(--green); font-size: 12px }
+.sub-popover .sub-note { color: var(--text3); font-size: 12px }
+@media (max-width: 500px) {
+  .sub-popover { left: 50% !important; right: auto; top: auto !important; bottom: 20px; transform: translateX(-50%); width: 90%; max-width: 320px }
+}

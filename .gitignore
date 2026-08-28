@@ -24,6 +24,11 @@ Thumbs.db
 recipes.json
 recipes-html/
 
+# Frontend
+web/node_modules/
+web/dist/
+*.tsbuildinfo
+
 # IDE / tools
 .playwright-mcp/
 .vscode/

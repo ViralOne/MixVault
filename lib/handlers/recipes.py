@@ -17,6 +17,7 @@ def _search(self, params):
     lang = params.get("lang",[""])[0]
     col = params.get("collection",[""])[0]
     fav = params.get("favorites",[""])[0]
+    tag = params.get("tag",[""])[0]
     random = params.get("random",[""])[0]
     limit = min(int(params.get("limit",["60"])[0]), 200)
     offset = int(params.get("offset",["0"])[0])
@@ -30,6 +31,8 @@ def _search(self, params):
         wheres.append("r.collection=?"); args.append(col)
     if fav == "1":
         wheres.append("r.id IN (SELECT recipe_id FROM favorites)")
+    if tag:
+        wheres.append("r.id IN (SELECT recipe_id FROM recipe_tags WHERE tag=?)"); args.append(tag)
 
     if random == "1":
         where_sql = " WHERE "+" AND ".join(wheres) if wheres else ""

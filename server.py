@@ -20,7 +20,7 @@ from lib.handlers.cooking import (
 )
 from lib.handlers.ai_handlers import _ai, _ai_create, _ai_image_search, _substitutions
 from lib.handlers.auth import _check_auth, _auth_page, _auth_login
-from lib.handlers.misc import _export, _poll, _health, _share_recipe, _note_get, _note_save, _restore, _tags_get, _tags_save
+from lib.handlers.misc import _export, _poll, _health, _share_recipe, _note_get, _note_save, _restore, _tags_get, _tags_save, _tags_list
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -158,6 +158,7 @@ Handler._note_get = _note_get
 Handler._note_save = _note_save
 Handler._restore = _restore
 Handler._tags_get = _tags_get
+Handler._tags_list = _tags_list
 Handler._tags_save = _tags_save
 
 
@@ -184,6 +185,8 @@ def _authed_do_GET(self):
         return self._share_recipe(unquote(p.path[11:]))
     if p.path == "/api/nutrition":
         return self._nutrition_search(parse_qs(p.query))
+    if p.path == "/api/tags":
+        return self._tags_list(parse_qs(p.query))
     if p.path.startswith("/api/tags/"):
         return self._tags_get(unquote(p.path[10:]))
     return _orig_do_GET(self)
