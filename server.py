@@ -7,7 +7,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 
 from lib.config import *
 from lib.config import CORS_ORIGINS
-from lib.db import get_db, find_recipe
+from lib.db import get_db, find_recipe, init_db
 from lib.handlers.recipes import (
     _search, _recipe, _meta, _similar, _favorites_list, _translate,
     _recipe_import, _recipe_edit, _recipe_delete, _cookidoo_import, _nutrition_search,
@@ -402,6 +402,7 @@ signal.signal(signal.SIGINT, _shutdown)
 
 
 if __name__ == "__main__":
+    init_db()   # create/upgrade the vault before any request can attach it
     get_db()
     # Verify DB has recipes table
     tables = [r[0] for r in get_db().execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]

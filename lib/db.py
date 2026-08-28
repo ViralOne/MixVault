@@ -116,19 +116,44 @@ _UNION_VIEW = f"""
 """
 
 
+def init_db():
+    """
+    Create the vault schema and upgrade an older database, once per process.
+
+    This runs on its own short-lived connection: while a migration is in flight it
+    holds a write transaction on both files, and a *serving* connection must never
+    do that — other threads attaching the vault at that moment fail with
+    "disk I/O error" on some filesystems (seen with a Docker bind mount).
+    """
+    if _migrated.is_set():
+        return
+    with _migrate_lock:
+        if _migrated.is_set():
+            return
+        boot = sqlite3.connect(DB_PATH)
+        try:
+            boot.row_factory = sqlite3.Row
+            boot.execute("PRAGMA journal_mode=WAL")
+            boot.execute("ATTACH DATABASE ? AS vault", [VAULT_DB_PATH])
+            boot.execute("PRAGMA vault.journal_mode=WAL")
+            boot.executescript(_VAULT_SCHEMA)
+            _migrate(boot)
+            boot.commit()
+            # Leave both files checkpointed so the first request starts clean.
+            boot.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            boot.execute("PRAGMA vault.wal_checkpoint(TRUNCATE)")
+        finally:
+            boot.close()
+        _migrated.set()
+
+
 def get_db():
     if not hasattr(local, "db"):
+        init_db()
         db = sqlite3.connect(DB_PATH)
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("ATTACH DATABASE ? AS vault", [VAULT_DB_PATH])
-        db.execute("PRAGMA vault.journal_mode=WAL")
-        db.executescript(_VAULT_SCHEMA)
-        if not _migrated.is_set():
-            with _migrate_lock:
-                if not _migrated.is_set():
-                    _migrate(db)
-                    _migrated.set()
         db.executescript(_UNION_VIEW)
         local.db = db
     return local.db
