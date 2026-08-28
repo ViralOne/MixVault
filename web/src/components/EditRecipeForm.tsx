@@ -15,13 +15,17 @@ export default function EditRecipeForm() {
   async function save() {
     setSaving(true);
     try {
-      await api.editRecipe(r.id, {
+      const d = await api.editRecipe(r.id, {
         name: name().trim(),
         image: image().trim(),
         yield: yieldText().trim(),
         ingredients: ings().split("\n").filter((l) => l.trim()),
         steps: steps().split("\n").filter((l) => l.trim()),
       });
+      if (!d.ok) {
+        showToast(d.error || "Could not save this recipe");
+        return;
+      }
       showToast("Recipe updated");
       setEditing(false);
       await openRecipe(r.id, { skipHash: true });

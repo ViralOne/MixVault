@@ -80,23 +80,27 @@ export default function DetailView() {
             >
               <span class="heart">{rec().is_favorite ? "♥" : "♡"}</span>
             </button>
-            <button type="button" class="fav-btn" title="Edit recipe" onClick={() => setEditing(!editing())}>
-              <IconEdit size={16} />
-            </button>
+            <Show when={rec().editable !== false}>
+              <button type="button" class="fav-btn" title="Edit recipe" onClick={() => setEditing(!editing())}>
+                <IconEdit size={16} />
+              </button>
+            </Show>
             <button type="button" class="fav-btn" title="Share recipe" onClick={shareRecipe}>
               <IconShare size={16} />
             </button>
-            <button
-              type="button" class="fav-btn" title="Delete recipe"
-              onClick={async () => {
-                if (await deleteRecipe()) {
-                  setView("browse");
-                  void doSearch(true);
-                }
-              }}
-            >
-              <IconTrash size={16} />
-            </button>
+            <Show when={rec().editable !== false}>
+              <button
+                type="button" class="fav-btn" title="Delete recipe"
+                onClick={async () => {
+                  if (await deleteRecipe()) {
+                    setView("browse");
+                    void doSearch(true);
+                  }
+                }}
+              >
+                <IconTrash size={16} />
+              </button>
+            </Show>
           </div>
 
           <div class="detail-scroll">

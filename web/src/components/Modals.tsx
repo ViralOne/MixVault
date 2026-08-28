@@ -1,5 +1,6 @@
-import { Show, createSignal, type JSX } from "solid-js";
+import { Show, createSignal, onMount, type JSX } from "solid-js";
 import { api } from "../lib/api";
+import type { Session } from "../lib/types";
 import { showToast } from "../state/toast";
 import { load as loadShopping } from "../state/shopping";
 import { IconDownload, IconMoon, IconWand } from "./Icons";
@@ -72,6 +73,14 @@ export function SettingsModal(props: {
   isDark: boolean;
 }) {
   const [status, setStatus] = createSignal("");
+  const [session, setSession] = createSignal<Session | null>(null);
+
+  onMount(() => void api.session().then(setSession).catch(() => {}));
+
+  async function signOut() {
+    await api.logout();
+    location.reload();
+  }
 
   async function restore(file: File | undefined) {
     if (!file) return;
@@ -119,6 +128,16 @@ export function SettingsModal(props: {
         onChange={(e) => void restore(e.currentTarget.files?.[0])}
       />
       <div class="status-line">{status()}</div>
+      <Show when={session()?.multi_user}>
+        <hr />
+        <div class="vault-row">
+          <div>
+            <div class="vault-label">{session()!.label || "This vault"}</div>
+            <div class="vault-hint">Only this vault's data is visible here.</div>
+          </div>
+          <button type="button" class="btn-cancel" onClick={() => void signOut()}>Sign out</button>
+        </div>
+      </Show>
       <div class="modal-btns">
         <button type="button" class="btn-cancel" onClick={props.onClose}>Close</button>
       </div>

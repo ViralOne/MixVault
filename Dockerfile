@@ -15,6 +15,8 @@ WORKDIR /app
 # No external Python dependencies needed - stdlib only
 COPY server.py .
 COPY lib/ lib/
+# scripts/users.py manages vault access keys from inside the container
+COPY scripts/ scripts/
 COPY --from=web /static/ static/
 
 # Create dirs for data
@@ -27,6 +29,7 @@ RUN chmod +x /entrypoint.sh
 EXPOSE 8080
 
 ENV DB_PATH=/data/recipes.db
+ENV VAULT_DB_PATH=/data/vault.db
 ENV LOG_DIR=/data/logs
 ENV BACKUP_DIR=/data/backups
 

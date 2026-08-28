@@ -30,6 +30,10 @@ export interface Recipe extends Omit<RecipeSlim, "stepCount"> {
   note?: string;
   is_favorite?: boolean;
   cook_count?: number;
+  /** True when this recipe lives in your vault rather than the shared library. */
+  private?: boolean;
+  /** False for shared library recipes while access keys are in use. */
+  editable?: boolean;
 }
 
 export interface HistoryEntry {
@@ -87,4 +91,12 @@ export interface Substitution {
   sub: string;
   ratio: string;
   note: string;
+}
+
+/** What the server will tell a signed-in client about its own session. */
+export interface Session {
+  multi_user: boolean;
+  signed_in: boolean;
+  label: string;
+  signup_enabled: boolean;
 }

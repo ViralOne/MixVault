@@ -6,21 +6,29 @@ services:
     ports:
       - "8039:8080"
     volumes:
+      # recipes.db is the shared library; vault.db holds every vault's private
+      # data (access keys, favourites, history, lists, imported recipes).
       - ./data:/data
     env_file:
       - .env
     environment:
       - DB_PATH=/data/recipes.db
+      - VAULT_DB_PATH=/data/vault.db
       - LOG_DIR=/data/logs
       - BACKUP_DIR=/data/backups
+      # .env may also set: ALLOW_SIGNUP=1 (self-serve vault keys),
+      # COOKIE (session cookie name), SESSION_MAX_AGE (seconds).
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8039/api/poll')"]
+      # /api/health answers without a key, but only with liveness.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
 
   # Optional: Caddy reverse proxy for HTTPS
-  # Uncomment below if you want HTTPS with auto-certs
+  # Uncomment below if you want HTTPS with auto-certs.
+  # Caddy must forward X-Forwarded-Proto so session cookies get the Secure flag.
   # caddy:
   #   image: caddy:2-alpine
   #   container_name: mixvault-caddy

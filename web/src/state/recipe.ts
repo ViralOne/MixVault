@@ -61,7 +61,12 @@ export async function deleteRecipe(): Promise<boolean> {
   const r = recipe();
   if (!r) return false;
   if (!confirm(`Delete "${r.name}"? This cannot be undone.`)) return false;
-  await api.deleteRecipe(r.id);
+  const d = await api.deleteRecipe(r.id);
+  if (!d.ok) {
+    // e.g. a shared library recipe, which no single vault may remove
+    showToast(d.error || "Could not delete this recipe");
+    return false;
+  }
   showToast("Recipe deleted");
   return true;
 }

@@ -1,10 +1,13 @@
 # Secrets
 .env
 
-# Database
+# Databases (recipe library + per-user vault)
 data/recipes.db
 data/recipes.db-wal
 data/recipes.db-shm
+data/vault.db
+data/vault.db-wal
+data/vault.db-shm
 
 # Runtime data
 data/logs/

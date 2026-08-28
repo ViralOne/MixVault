@@ -1,11 +1,20 @@
 /** Thin typed wrappers around the Python API. One place for every endpoint. */
 import type {
   AiSearchResponse, ChatMessage, CreatorRecipe, HistoryEntry, Meta, Recipe,
-  RecipeSlim, SearchResponse, ShopItem, Substitution,
+  RecipeSlim, SearchResponse, Session, ShopItem, Substitution,
 } from "./types";
+
+/** A 401 means the access key cookie is gone or was revoked — go back to the door. */
+function bounceIfUnauthorized(r: Response) {
+  if (r.status === 401) {
+    location.reload();
+    throw new Error("unauthorized");
+  }
+}
 
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
+  bounceIfUnauthorized(r);
   return (await r.json()) as T;
 }
 
@@ -15,6 +24,7 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  bounceIfUnauthorized(r);
   return (await r.json()) as T;
 }
 
@@ -64,9 +74,13 @@ export const api = {
   importRecipe: (recipe: CreatorRecipe) =>
     post<{ ok: boolean; id: string; error?: string }>("/api/recipe/import", recipe),
   editRecipe: (id: string, data: Partial<Recipe>) =>
-    post<{ ok: boolean }>("/api/recipe/edit/" + encodeURIComponent(id), data),
-  deleteRecipe: (id: string) => post<{ ok: boolean }>("/api/recipe/delete/" + encodeURIComponent(id)),
+    post<{ ok?: boolean; error?: string }>("/api/recipe/edit/" + encodeURIComponent(id), data),
+  deleteRecipe: (id: string) =>
+    post<{ ok?: boolean; error?: string }>("/api/recipe/delete/" + encodeURIComponent(id)),
   restoreBackup: (data: unknown) => post<{ ok: boolean }>("/api/import/restore", data),
 
   poll: () => get<{ shopping_count: number; favorites_count: number }>("/api/poll"),
+
+  session: () => get<Session>("/api/session"),
+  logout: () => post<{ ok: boolean }>("/api/auth/logout", {}),
 };

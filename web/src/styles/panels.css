@@ -144,3 +144,9 @@
 .modal hr { border: none; border-top: 1px solid var(--border); margin-bottom: 12px }
 .modal .field-label { font-size: 13px; color: var(--text2); display: block; margin-bottom: 6px }
 .modal input[type=file] { font-size: 13px; margin-bottom: 12px }
+
+/* Vault identity in settings */
+.vault-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px }
+.vault-label { font-size: 14px; font-weight: 600 }
+.vault-hint { font-size: 12px; color: var(--text3); margin-top: 2px }
+.vault-row button { margin-left: auto; flex-shrink: 0 }

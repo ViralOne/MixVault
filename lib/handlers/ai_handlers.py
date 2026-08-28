@@ -87,7 +87,9 @@ No explanation, just the JSON."""},
     if all_recipes:
         ids = [r["id"] for r in all_recipes]
         ph = ",".join("?" * len(ids))
-        noted = set(x[0] for x in db.execute(f"SELECT recipe_id FROM recipe_notes WHERE recipe_id IN ({ph})", ids).fetchall())
+        noted = set(x[0] for x in db.execute(
+            f"SELECT recipe_id FROM vault.recipe_notes WHERE user_id=? AND recipe_id IN ({ph})",
+            [self.user_id] + ids).fetchall())
     self._json({"keywords": all_keywords, "langs": all_langs, "total": len(all_recipes),
                  "recipes": [slim_row(r, noted) for r in all_recipes[:20]]})
 

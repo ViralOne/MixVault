@@ -4,8 +4,16 @@ __pycache__
 data/
 recipes.json
 recipes-html/
-scripts/
+# scripts/ is copied into the image: scripts/users.py manages vault keys.
+# Keep the heavy DB-building scripts out of the build context instead.
+scripts/build.sh
+scripts/build_db.py
+scripts/build_icons.py
+scripts/parse_recipes.py
+scripts/download-db.sh
 .DS_Store
 .env
 *.log
 .playwright-mcp/
+web/node_modules/
+.impeccable/

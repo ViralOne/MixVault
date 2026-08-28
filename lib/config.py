@@ -34,17 +34,34 @@ OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "qwen/qwen3.6-plus:free")
 # LLM_PROVIDER: comma-separated priority order. Options: ollama, groq, openrouter
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq,openrouter,ollama")
 AUTH_PIN = os.environ.get("AUTH_PIN", "")
+# Let anyone reaching the login page mint their own vault key (off by default).
+ALLOW_SIGNUP = os.environ.get("ALLOW_SIGNUP", "").strip().lower() in ("1", "true", "yes")
+# Session cookie holding the access-key hash. Rename it to sign every device out.
+COOKIE = os.environ.get("COOKIE", "mv_key").strip() or "mv_key"
+# How long a signed-in device stays signed in, in seconds (default one year).
+try:
+    SESSION_MAX_AGE = max(60, int(os.environ.get("SESSION_MAX_AGE", "31536000")))
+except ValueError:
+    SESSION_MAX_AGE = 31536000
 if OLLAMA_URL: log.info(f"Ollama configured ({OLLAMA_URL}, model={OLLAMA_MODEL})")
 if GROQ_API_KEY: log.info(f"Groq API key loaded ({GROQ_API_KEY[:8]}...)")
 if OPENROUTER_API_KEY: log.info(f"OpenRouter API key loaded ({OPENROUTER_API_KEY[:12]}...)")
-if AUTH_PIN: log.info("PIN authentication enabled")
+if AUTH_PIN: log.info("PIN authentication enabled (legacy single-user mode)")
+if ALLOW_SIGNUP: log.info("Self-serve vault creation enabled")
 log.info(f"LLM priority: {LLM_PROVIDER}")
 
-PORT = 8080
+PORT = int(os.environ.get("PORT", "8080"))
+# Origins allowed to call the API with credentials (comma-separated). Empty = same-origin only.
+CORS_ORIGINS = {o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()}
+# Only trust X-Forwarded-For when a reverse proxy you control sets it.
+TRUST_PROXY = os.environ.get("TRUST_PROXY", "").strip().lower() in ("1", "true", "yes")
 MAX_BODY_SIZE = 64 * 1024  # 64KB max POST body
 START_TIME = time.time()
 
+# The recipe library: shareable, holds nothing personal.
 DB_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent.parent / "data" / "recipes.db"))
+# Everything personal (access keys, favourites, history, lists, private recipes).
+VAULT_DB_PATH = os.environ.get("VAULT_DB_PATH", str(Path(DB_PATH).parent / "vault.db"))
 STATIC = str(Path(__file__).parent.parent / "static")
 BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", str(Path(__file__).parent.parent / "data" / "backups")))
 BACKUP_DIR.mkdir(parents=True, exist_ok=True)
