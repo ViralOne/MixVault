@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-08-28T16:22:34.442Z",
+        "reason": "Pre-existing project typeface: the original static/index.html loaded Inter via Google Fonts; the SolidJS rewrite preserves the existing visual identity rather than restyling type."
+      }
+    ]
+  }
+}
