@@ -4,12 +4,20 @@ import type {
   RecipeSlim, SearchResponse, Session, ShopItem, Substitution,
 } from "./types";
 
-/** A 401 means the access key cookie is gone or was revoked — go back to the door. */
+/**
+ * A 401 means the access key cookie is gone or was revoked — go back to the door.
+ * Guarded so a burst of failing requests cannot turn into a reload loop.
+ */
+const BOUNCE_KEY = "mv:bounced";
+
 function bounceIfUnauthorized(r: Response) {
-  if (r.status === 401) {
-    location.reload();
-    throw new Error("unauthorized");
+  if (r.status !== 401) return;
+  const last = Number(sessionStorage.getItem(BOUNCE_KEY) || 0);
+  if (Date.now() - last > 5000) {
+    sessionStorage.setItem(BOUNCE_KEY, String(Date.now()));
+    location.replace("/");
   }
+  throw new Error("unauthorized");
 }
 
 async function get<T>(path: string): Promise<T> {

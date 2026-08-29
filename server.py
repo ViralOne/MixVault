@@ -84,6 +84,27 @@ class Handler(SimpleHTTPRequestHandler):
         else:
             self.send_error(404)
 
+    def send_head(self):
+        """
+        Static files, with cache rules that suit an app behind a login:
+
+        index.html must always be revalidated — a cached copy would let a
+        signed-out browser paint the app shell and then fire a burst of 401s.
+        Asset filenames carry a content hash, so those are safe to keep forever.
+        """
+        path = urlparse(self.path).path
+        if path.startswith("/assets/"):
+            self._extra_headers = [("Cache-Control", "public, max-age=31536000, immutable")]
+        else:
+            self._extra_headers = [("Cache-Control", "no-cache")]
+        return super().send_head()
+
+    def end_headers(self):
+        for name, value in getattr(self, "_extra_headers", ()):
+            self.send_header(name, value)
+        self._extra_headers = ()
+        super().end_headers()
+
     def _cors_headers(self):
         """
         Only origins named in CORS_ORIGINS may talk to the API with credentials.

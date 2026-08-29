@@ -14,6 +14,7 @@ import { exitCooking, loadResumeHint, onLeaveCooking, resumeCooking } from "./st
 import { openRecipe } from "./state/recipe";
 import { handleHash, initRouter, registerRouter, setView, view } from "./state/router";
 import { load as loadShopping, open as shopPanelOpen, togglePanel } from "./state/shopping";
+import { loadSession } from "./state/session";
 
 export default function App() {
   const [dark, setDark] = createSignal(document.documentElement.classList.contains("dark"));
@@ -61,6 +62,7 @@ export default function App() {
 
     void doSearch(true);
     void loadShopping();
+    void loadSession();
     void loadResumeHint();
     if (location.hash.length > 2) void handleHash();
 

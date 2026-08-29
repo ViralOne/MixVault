@@ -1,6 +1,6 @@
-import { Show, createSignal, onMount, type JSX } from "solid-js";
+import { Show, createSignal, type JSX } from "solid-js";
 import { api } from "../lib/api";
-import type { Session } from "../lib/types";
+import { session, signOut } from "../state/session";
 import { showToast } from "../state/toast";
 import { load as loadShopping } from "../state/shopping";
 import { IconDownload, IconMoon, IconWand } from "./Icons";
@@ -73,14 +73,6 @@ export function SettingsModal(props: {
   isDark: boolean;
 }) {
   const [status, setStatus] = createSignal("");
-  const [session, setSession] = createSignal<Session | null>(null);
-
-  onMount(() => void api.session().then(setSession).catch(() => {}));
-
-  async function signOut() {
-    await api.logout();
-    location.reload();
-  }
 
   async function restore(file: File | undefined) {
     if (!file) return;

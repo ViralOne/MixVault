@@ -8,7 +8,8 @@ import {
   setNutrition, setQuery, setTag, tag, toggleFavFilter, toggleHistory, resultInfo,
 } from "../state/browse";
 import { open as shopOpen, togglePanel, uncheckedCount } from "../state/shopping";
-import { IconCart, IconLogo, IconMore, IconDice, IconSearch, IconSparkles } from "./Icons";
+import { session, signOut } from "../state/session";
+import { IconCart, IconLogo, IconMore, IconDice, IconSearch, IconSparkles, IconSwitchVault } from "./Icons";
 
 export default function TopBar(props: { onRandom: () => void; onSettings: () => void }) {
   const [meta, setMeta] = createSignal<Meta | null>(null);
@@ -71,6 +72,16 @@ export default function TopBar(props: { onRandom: () => void; onSettings: () => 
             <span class="shop-badge" aria-live="polite">{uncheckedCount()}</span>
           </Show>
         </button>
+        <Show when={session()?.multi_user}>
+          <button
+            type="button" class="icon-btn"
+            title={`Switch vault (signed in as ${session()!.label || "this vault"})`}
+            aria-label="Switch vault"
+            onClick={() => void signOut()}
+          >
+            <IconSwitchVault />
+          </button>
+        </Show>
         <button type="button" class="icon-btn" title="Settings" onClick={props.onSettings}>
           <IconMore />
         </button>
