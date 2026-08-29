@@ -140,6 +140,11 @@ export function SettingsModal(props: {
           <IconDownload size={16} /> Download Backup
         </button>
       </div>
+      <p class="settings-hint">
+        Your vault only: favourites, cooking history, shopping list, notes, tags and
+        the recipes you added. The shared recipe library is not included — it lives in
+        its own file.
+      </p>
       <label class="field-label" for="restore-file">Restore from backup</label>
       <input
         id="restore-file" type="file" accept=".json"

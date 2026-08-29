@@ -1,21 +1,24 @@
 """Miscellaneous handlers: export, poll, health, share, notes."""
-import html, time
+import hashlib, html, time
 from pathlib import Path
 from ..config import DB_PATH, BACKUP_DIR, START_TIME
 from ..db import get_db, full_row, find_recipe
 
 
 def _export(self, params):
-    """Export shopping list and notes as JSON."""
+    """
+    Everything this vault owns, as JSON — or just the shopping list, as CSV.
+
+    The recipe library is deliberately absent: it is shared, unchanged by you and
+    already a single file you can copy (recipes.db). What cannot be reconstructed
+    is what lives in the vault, so all of it goes here.
+    """
     db = get_db()
     uid = self.user_id
     shopping = [dict(r) for r in db.execute(
         "SELECT id, item, recipe_id, recipe_name, checked, added_at FROM vault.shopping_list"
         " WHERE user_id=? ORDER BY added_at DESC", [uid]).fetchall()]
-    notes = [dict(r) for r in db.execute(
-        "SELECT recipe_id, note, updated_at FROM vault.recipe_notes WHERE user_id=?", [uid]).fetchall()]
-    favorites = [r[0] for r in db.execute(
-        "SELECT recipe_id FROM vault.favorites WHERE user_id=?", [uid]).fetchall()]
+
     fmt = params.get("format", ["json"])[0]
     if fmt == "csv":
         import csv, io
@@ -29,10 +32,30 @@ def _export(self, params):
         self.send_header("Content-Type", "text/csv")
         self.send_header("Content-Disposition", "attachment; filename=shopping_list.csv")
         self.send_header("Content-Length", len(body))
+        self.send_header("Cache-Control", "no-store, private")
         self.end_headers()
         self.wfile.write(body)
-    else:
-        self._json({"shopping": shopping, "notes": notes, "favorites": favorites})
+        return
+
+    notes = [dict(r) for r in db.execute(
+        "SELECT recipe_id, note, updated_at FROM vault.recipe_notes WHERE user_id=?", [uid]).fetchall()]
+    favorites = [r[0] for r in db.execute(
+        "SELECT recipe_id FROM vault.favorites WHERE user_id=?", [uid]).fetchall()]
+    tags = [dict(r) for r in db.execute(
+        "SELECT recipe_id, tag FROM vault.recipe_tags WHERE user_id=?", [uid]).fetchall()]
+    history = [dict(r) for r in db.execute(
+        "SELECT recipe_id, cooked_at FROM vault.cooking_history WHERE user_id=? ORDER BY cooked_at",
+        [uid]).fetchall()]
+    recipes = [dict(r) for r in db.execute(
+        "SELECT id, name, country, lang, collection, image, total_time, yield, categories,"
+        " ingredients, steps, nutrition, keywords, created_at FROM vault.user_recipes WHERE owner=?",
+        [uid]).fetchall()]
+    self._json({
+        "version": 2,
+        "exported_at": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
+        "shopping": shopping, "notes": notes, "favorites": favorites,
+        "tags": tags, "history": history, "recipes": recipes,
+    })
 
 def _poll(self, params):
     """Return last-modified timestamps for multi-device sync."""
@@ -127,24 +150,72 @@ def _note_save(self, rid, req):
     self._json({"ok": True})
 
 def _restore(self, req):
-    """Restore favorites, notes, shopping list from backup JSON."""
+    """
+    Load a vault export back in. Everything lands in the *caller's* vault, so a
+    backup can be restored into a fresh vault after a lost key. Repeated restores
+    of the same file do not duplicate rows, except shopping items, which have no
+    natural identity.
+    """
     db = get_db()
     uid = self.user_id
-    if req.get("favorites"):
-        for rid in req["favorites"]:
-            db.execute("INSERT OR IGNORE INTO vault.favorites(user_id,recipe_id) VALUES(?,?)", [uid, str(rid)])
-    if req.get("notes"):
-        for n in req["notes"]:
-            if n.get("recipe_id") and n.get("note"):
-                db.execute("INSERT OR REPLACE INTO vault.recipe_notes(user_id,recipe_id,note,updated_at)"
-                           " VALUES(?,?,?,datetime('now'))", [uid, n["recipe_id"], n["note"]])
-    if req.get("shopping"):
-        for s in req["shopping"]:
-            if s.get("item"):
-                db.execute("INSERT INTO vault.shopping_list(user_id,item,recipe_id,recipe_name,checked) VALUES(?,?,?,?,?)",
-                           [uid, s["item"], s.get("recipe_id",""), s.get("recipe_name",""), s.get("checked",0)])
+    counts = {}
+
+    for rid in req.get("favorites") or []:
+        db.execute("INSERT OR IGNORE INTO vault.favorites(user_id,recipe_id) VALUES(?,?)", [uid, str(rid)])
+    counts["favorites"] = len(req.get("favorites") or [])
+
+    for n in req.get("notes") or []:
+        if n.get("recipe_id") and n.get("note"):
+            db.execute("INSERT OR REPLACE INTO vault.recipe_notes(user_id,recipe_id,note,updated_at)"
+                       " VALUES(?,?,?,datetime('now'))", [uid, n["recipe_id"], n["note"]])
+    counts["notes"] = len(req.get("notes") or [])
+
+    for s in req.get("shopping") or []:
+        if s.get("item"):
+            db.execute("INSERT INTO vault.shopping_list(user_id,item,recipe_id,recipe_name,checked)"
+                       " VALUES(?,?,?,?,?)",
+                       [uid, s["item"], s.get("recipe_id",""), s.get("recipe_name",""), s.get("checked",0)])
+    counts["shopping"] = len(req.get("shopping") or [])
+
+    for t in req.get("tags") or []:
+        if t.get("recipe_id") and t.get("tag"):
+            db.execute("INSERT OR IGNORE INTO vault.recipe_tags(user_id,recipe_id,tag) VALUES(?,?,?)",
+                       [uid, t["recipe_id"], t["tag"]])
+    counts["tags"] = len(req.get("tags") or [])
+
+    for h in req.get("history") or []:
+        if not h.get("recipe_id"):
+            continue
+        # Same recipe at the same instant is the same cook, however often you restore.
+        dup = db.execute("SELECT 1 FROM vault.cooking_history WHERE user_id=? AND recipe_id=? AND cooked_at=?",
+                         [uid, h["recipe_id"], h.get("cooked_at")]).fetchone()
+        if not dup:
+            db.execute("INSERT INTO vault.cooking_history(user_id,recipe_id,cooked_at) VALUES(?,?,?)",
+                       [uid, h["recipe_id"], h.get("cooked_at")])
+    counts["history"] = len(req.get("history") or [])
+
+    restored_recipes = 0
+    for r in req.get("recipes") or []:
+        if not (r.get("id") and r.get("name")):
+            continue
+        rid = r["id"]
+        existing = db.execute("SELECT owner FROM vault.user_recipes WHERE id=?", [rid]).fetchone()
+        if existing and existing["owner"] != uid:
+            # The id is taken by another vault; give this copy its own.
+            rid = hashlib.md5(f"{uid}:{r['name']}:{r.get('created_at','')}".encode()).hexdigest()[:12]
+        db.execute(
+            "INSERT OR REPLACE INTO vault.user_recipes(id,owner,name,country,lang,collection,image,"
+            "total_time,yield,categories,ingredients,steps,nutrition,keywords) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [rid, uid, r["name"], r.get("country","Custom"), r.get("lang","en"),
+             r.get("collection","My Recipes"), r.get("image",""), r.get("total_time",""),
+             r.get("yield",""), r.get("categories","[]"), r.get("ingredients","[]"),
+             r.get("steps","[]"), r.get("nutrition","{}"), r.get("keywords","")])
+        restored_recipes += 1
+    counts["recipes"] = restored_recipes
+
     db.commit()
-    self._json({"ok": True})
+    self._json({"ok": True, "restored": counts})
 
 def _tags_list(self, params=None):
     """All distinct tags with usage counts, for the browse filter."""

@@ -224,7 +224,8 @@ Only configure the providers you want to use. The app tries them in `LLM_PROVIDE
 | `/api/shopping` | GET | Shopping list |
 | `/api/shopping/add` | POST | Add ingredients |
 | `/api/shopping/restore` | POST | Undo clear |
-| `/api/export` | GET | Export data (JSON/CSV) |
+| `/api/export` | GET | Export your vault (JSON: favourites, notes, list, tags, history, your recipes — CSV: shopping list) |
+| `/api/import/restore` | POST | Load a vault export into the calling vault |
 | `/api/cooking-state` | GET/POST | Cross-device cooking resume |
 | `/api/tags` | GET | All tags with usage counts (browse filter) |
 | `/api/tags/:id` | GET/POST | Tags for one recipe |
@@ -244,6 +245,13 @@ everyone's personal data live there. Manual backup:
 ```bash
 ./backup.sh
 ```
+
+**Per-vault backup.** Settings → *Download Backup* exports one vault as JSON:
+favourites, cooking history, shopping list, notes, tags and the recipes that vault
+added. The shared library is not in there — it is `recipes.db`, one file you copy
+directly. *Restore from backup* loads such a file into whichever vault is signed
+in, so a backup also serves to move a vault or rebuild one after a lost key;
+restoring the same file twice does not duplicate anything except shopping items.
 
 ## Building the Database
 
