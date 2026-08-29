@@ -1,6 +1,7 @@
 import { Show, createSignal, type JSX } from "solid-js";
 import { api } from "../lib/api";
 import { session, signOut } from "../state/session";
+import { IconPlus, IconCheck } from "./Icons";
 import { showToast } from "../state/toast";
 import { load as loadShopping } from "../state/shopping";
 import { IconDownload, IconMoon, IconWand } from "./Icons";
@@ -73,6 +74,31 @@ export function SettingsModal(props: {
   isDark: boolean;
 }) {
   const [status, setStatus] = createSignal("");
+  const [newKey, setNewKey] = createSignal("");
+  const [copied, setCopied] = createSignal(false);
+  const [minting, setMinting] = createSignal(false);
+
+  async function createVault() {
+    const label = prompt("Who is this vault for? (a name, just for your reference)");
+    if (label === null) return;
+    setMinting(true);
+    try {
+      const d = await api.createVault(label);
+      if (!d.ok || !d.key) {
+        showToast(d.error || "Could not create a vault");
+        return;
+      }
+      setNewKey(d.key);
+      setCopied(false);
+    } finally {
+      setMinting(false);
+    }
+  }
+
+  async function copyKey() {
+    await navigator.clipboard.writeText(newKey());
+    setCopied(true);
+  }
 
   async function restore(file: File | undefined) {
     if (!file) return;
@@ -122,6 +148,24 @@ export function SettingsModal(props: {
       <div class="status-line">{status()}</div>
       <Show when={session()?.multi_user}>
         <hr />
+        <div class="settings-stack">
+          <button type="button" class="btn-neutral" disabled={minting()} onClick={() => void createVault()}>
+            <IconPlus size={16} /> {minting() ? "Creating…" : "Create a vault key"}
+          </button>
+        </div>
+        <Show when={newKey()}>
+          <div class="keybox">{newKey()}</div>
+          <div class="keybox-actions">
+            <button type="button" class="btn-primary" onClick={() => void copyKey()}>
+              <Show when={copied()} fallback="Copy key"><IconCheck size={14} /> Copied</Show>
+            </button>
+            <button type="button" class="btn-cancel" onClick={() => setNewKey("")}>Done</button>
+          </div>
+          <p class="keybox-warn">
+            Shown once — it cannot be recovered. Whoever holds it opens that vault,
+            so pass it on privately.
+          </p>
+        </Show>
         <div class="vault-row">
           <div>
             <div class="vault-label">{session()!.label || "This vault"}</div>

@@ -90,5 +90,7 @@ export const api = {
   poll: () => get<{ shopping_count: number; favorites_count: number }>("/api/poll"),
 
   session: () => get<Session>("/api/session"),
+  createVault: (label: string) =>
+    post<{ ok?: boolean; key?: string; id?: string; error?: string }>("/api/auth/new", { label }),
   logout: () => post<{ ok: boolean }>("/api/auth/logout", {}),
 };

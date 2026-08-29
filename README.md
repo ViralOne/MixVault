@@ -107,8 +107,12 @@ Notes:
   the vault and are visible only to their owner — including via `/api/share/:id`.
 - **The shared library is read-only** once access keys exist: no vault can edit or
   delete a recipe everyone else sees (`403`). In single-user mode both still work.
-- **Self-serve signup.** Set `ALLOW_SIGNUP=1` to add a "Create a new vault" button
-  to the login page; keys are shown once, right after creation.
+- **Making keys from the app.** Anyone signed in can mint a key for someone else:
+  Settings → *Create a vault key*. It shows the key once with a Copy button and
+  does not touch your own session. (A new vault reveals nothing about existing
+  ones, which is why members may do this.)
+- **Self-serve signup.** Set `ALLOW_SIGNUP=1` to also put a "Create a new vault"
+  button on the login page, for people who have no key yet.
 - **Losing a key means losing the vault.** Keep `data/vault.db` in your backups —
   hourly backups cover both databases (`data/backups/recipes_*.db`, `vault_*.db`).
 - Behind HTTPS, forward `X-Forwarded-Proto` so the session cookie gets `Secure`.
@@ -208,7 +212,7 @@ Only configure the providers you want to use. The app tries them in `LLM_PROVIDE
 | `/api/tags/:id` | GET/POST | Tags for one recipe |
 | `/api/poll` | GET | Multi-device sync polling |
 | `/api/auth` | POST | Exchange an access key for a session cookie |
-| `/api/auth/new` | POST | Create a vault (only when `ALLOW_SIGNUP=1`) |
+| `/api/auth/new` | POST | Mint a vault key (signed-in members, or `ALLOW_SIGNUP=1`) |
 | `/api/auth/logout` | POST | Clear the session cookie |
 | `/api/session` | GET | Own session info (never other vaults) |
 | `/api/health` | GET | Server health & stats |

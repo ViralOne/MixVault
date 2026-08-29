@@ -257,14 +257,23 @@ def _auth_login(self, req):
 
 
 def _auth_signup(self, req):
-    """Self-serve vault creation, only when ALLOW_SIGNUP is set."""
-    if not ALLOW_SIGNUP or not users_exist():
+    """
+    Mint a vault key.
+
+    Two callers: someone already signed in creating a key for another person
+    (always allowed — they can already see their own vault, and a new vault tells
+    them nothing about existing ones), or a stranger on the login page, which
+    requires ALLOW_SIGNUP. Only the second case takes over the session.
+    """
+    invited_by_member = bool(getattr(self, "user_id", ""))
+    if not invited_by_member and not (ALLOW_SIGNUP and users_exist()):
         return _send_json(self, {"ok": False, "error": "Vault creation is disabled."}, 403)
     if _throttled(self):
         return _send_json(self, {"ok": False, "error": "Too many attempts. Wait a minute."}, 429)
-    _, key = create_user(str(req.get("label") or ""))
-    log.info(f"new vault created from {_client_ip(self)}")
-    return _send_json(self, {"ok": True, "key": key}, cookie=_set_cookie(self, hash_key(key)))
+    uid, key = create_user(str(req.get("label") or ""))
+    log.info(f"new vault {uid} created ({'invite' if invited_by_member else 'self-serve'})")
+    cookie = None if invited_by_member else _set_cookie(self, hash_key(key))
+    return _send_json(self, {"ok": True, "key": key, "id": uid}, cookie=cookie)
 
 
 def _auth_logout(self, req=None):
