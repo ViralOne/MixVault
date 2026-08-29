@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """MixVault - SQLite-backed server with FTS5 search."""
-import json, sqlite3, threading, time, signal, sys
+import base64, hashlib, json, re, sqlite3, threading, time, signal, sys
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from pathlib import Path
 from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs, unquote
 
@@ -24,6 +25,49 @@ from lib.handlers.auth import (
     _check_auth, _auth_page, _auth_login, _auth_signup, _auth_logout, _session,
 )
 from lib.handlers.misc import _export, _poll, _health, _share_recipe, _note_get, _note_save, _restore, _tags_get, _tags_save, _tags_list
+
+
+BASE_HEADERS = (
+    ("X-Content-Type-Options", "nosniff"),
+    ("X-Frame-Options", "DENY"),
+    ("Referrer-Policy", "no-referrer"),
+    ("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()"),
+)
+
+_app_csp = None
+
+
+def app_csp():
+    """
+    CSP for the app shell.
+
+    The inline theme script in index.html is allowed by hash, read from the file
+    Vite actually produced — so a rebuild that changes that script does not need a
+    matching edit here. Google Fonts is the one third party the page talks to.
+    """
+    global _app_csp
+    if _app_csp is None:
+        digests = []
+        try:
+            shell = (Path(STATIC) / "index.html").read_text(encoding="utf-8")
+            for body in re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", shell, re.S):
+                digests.append("'sha256-" +
+                               base64.b64encode(hashlib.sha256(body.encode()).digest()).decode() + "'")
+        except OSError:
+            log.warning("could not read index.html for CSP hashes")
+        _app_csp = "; ".join([
+            "default-src 'self'",
+            "script-src 'self' " + " ".join(digests),
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "font-src 'self' https://fonts.gstatic.com",
+            # Recipe photos are hotlinked from the sources the library was built from.
+            "img-src 'self' data: https:",
+            "connect-src 'self'",
+            "frame-ancestors 'none'",
+            "base-uri 'none'",
+            "form-action 'self'",
+        ])
+    return _app_csp
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -52,15 +96,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         p = urlparse(self.path)
-        content_len = int(self.headers.get("Content-Length", 0))
-        if content_len > MAX_BODY_SIZE:
-            self.send_error(413, "Request body too large")
+        req = _read_json(self)
+        if req is None:
             return
-        body = self.rfile.read(content_len)
-        try:
-            req = json.loads(body) if body else {}
-        except Exception:
-            req = {}
         if p.path.startswith("/api/favorite/"):
             self._favorite_toggle(unquote(p.path[14:]))
         elif p.path.startswith("/api/translate/"):
@@ -97,10 +135,14 @@ class Handler(SimpleHTTPRequestHandler):
             self._extra_headers = [("Cache-Control", "public, max-age=31536000, immutable")]
         else:
             self._extra_headers = [("Cache-Control", "no-cache")]
+        if path in ("/", "/index.html"):
+            self._extra_headers.append(("Content-Security-Policy", app_csp()))
         return super().send_head()
 
     def end_headers(self):
         for name, value in getattr(self, "_extra_headers", ()):
+            self.send_header(name, value)
+        for name, value in BASE_HEADERS:
             self.send_header(name, value)
         self._extra_headers = ()
         super().end_headers()
@@ -245,15 +287,52 @@ def _authed_do_GET(self):
     return _orig_do_GET(self)
 
 def _read_json(self):
-    content_len = int(self.headers.get("Content-Length", 0))
-    if content_len > MAX_BODY_SIZE:
-        self.send_error(413)
+    """
+    The request body as a dict, or None when it was refused (413/400 already sent).
+
+    Every POST route goes through this: reading Content-Length by hand in each
+    handler is how one of them ends up without a size check.
+    """
+    try:
+        content_len = int(self.headers.get("Content-Length", 0) or 0)
+    except ValueError:
+        self.send_error(400, "Bad Content-Length")
+        return None
+    if content_len < 0 or content_len > MAX_BODY_SIZE:
+        self.send_error(413, "Request body too large")
         return None
     body = self.rfile.read(content_len)
     try:
-        return json.loads(body) if body else {}
+        parsed = json.loads(body) if body else {}
     except Exception:
         return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _origin_ok(self) -> bool:
+    """
+    Refuse writes that another site set in motion.
+
+    `SameSite=Lax` already keeps the session cookie off cross-site POSTs, but
+    /api/auth needs no cookie to work: without this check a page could quietly
+    sign a visitor into *its* vault and then read whatever they cooked next.
+    Requests with no Origin at all (curl, scripts) carry no ambient credentials
+    from a browser, so they pass.
+
+    `Sec-Fetch-Site` decides when the browser sent it: it is set by the browser,
+    cannot be forged from a page, and stays correct behind a proxy that rewrites
+    Host. Comparing Origin to Host is only the fallback for browsers too old to
+    send it.
+    """
+    origin = self.headers.get("Origin", "")
+    if origin and origin in CORS_ORIGINS:
+        return True
+    site = self.headers.get("Sec-Fetch-Site", "")
+    if site:
+        return site in ("same-origin", "none")
+    if origin:
+        return origin.split("//", 1)[-1] == self.headers.get("Host", "")
+    return True
 
 
 def _authed_do_HEAD(self):
@@ -269,9 +348,29 @@ def _authed_do_HEAD(self):
     return _orig_do_HEAD(self)
 
 
+#: POST routes taking a JSON body: exact path → handler.
+_POST_ROUTES = {
+    "/api/recipe/import":  lambda s, req: s._recipe_import(req),
+    "/api/cooking-state":  lambda s, req: s._cooking_state_save(req),
+    "/api/ai/create":      lambda s, req: s._ai_create(req),
+    "/api/ai/images":      lambda s, req: s._ai_image_search(req),
+    "/api/import/cookidoo": lambda s, req: s._cookidoo_import(req),
+    "/api/import/restore": lambda s, req: s._restore(req),
+    "/api/substitutions":  lambda s, req: s._substitutions(req),
+}
+
+#: Same, for routes carrying an id in the path: prefix → handler(id, body).
+_POST_PREFIXES = (
+    ("/api/recipe/edit/", lambda s, rid, req: s._recipe_edit(rid, req)),
+    ("/api/tags/",        lambda s, rid, req: s._tags_save(rid, req)),
+)
+
+
 def _authed_do_POST(self):
     p = urlparse(self.path)
     self.user_id, self.authed = "", False
+    if not _origin_ok(self):
+        return self._json({"error": "cross-site request refused"}, 403)
     if p.path in ("/api/auth", "/api/auth/new", "/api/auth/logout"):
         req = _read_json(self)
         if req is None:
@@ -285,81 +384,16 @@ def _authed_do_POST(self):
     self.authed = self._check_auth()
     if not self.authed:
         return self._json({"error": "unauthorized"}, 401)
-    # New POST routes
-    if p.path == "/api/recipe/import":
-        content_len = int(self.headers.get("Content-Length", 0))
-        if content_len > MAX_BODY_SIZE:
-            return self.send_error(413)
-        body = self.rfile.read(content_len)
-        try: req = json.loads(body) if body else {}
-        except: req = {}
-        return self._recipe_import(req)
+
     if p.path.startswith("/api/recipe/delete/"):
         return self._recipe_delete(unquote(p.path[19:]))
-    if p.path.startswith("/api/recipe/edit/"):
-        content_len = int(self.headers.get("Content-Length", 0))
-        if content_len > MAX_BODY_SIZE:
-            return self.send_error(413)
-        body = self.rfile.read(content_len)
-        try: req = json.loads(body) if body else {}
-        except: req = {}
-        return self._recipe_edit(unquote(p.path[17:]), req)
-    if p.path == "/api/cooking-state":
-        content_len = int(self.headers.get("Content-Length", 0))
-        if content_len > MAX_BODY_SIZE:
-            return self.send_error(413)
-        body = self.rfile.read(content_len)
-        try: req = json.loads(body) if body else {}
-        except: req = {}
-        return self._cooking_state_save(req)
-    if p.path == "/api/ai/create":
-        content_len = int(self.headers.get("Content-Length", 0))
-        if content_len > MAX_BODY_SIZE:
-            return self.send_error(413)
-        body = self.rfile.read(content_len)
-        try: req = json.loads(body) if body else {}
-        except: req = {}
-        return self._ai_create(req)
-    if p.path == "/api/ai/images":
-        content_len = int(self.headers.get("Content-Length", 0))
-        if content_len > MAX_BODY_SIZE:
-            return self.send_error(413)
-        body = self.rfile.read(content_len)
-        try: req = json.loads(body) if body else {}
-        except: req = {}
-        return self._ai_image_search(req)
-    if p.path == "/api/import/cookidoo":
-        content_len = int(self.headers.get("Content-Length", 0))
-        if content_len > MAX_BODY_SIZE:
-            return self.send_error(413)
-        body = self.rfile.read(content_len)
-        try: req = json.loads(body) if body else {}
-        except: req = {}
-        return self._cookidoo_import(req)
-    if p.path == "/api/substitutions":
-        content_len = int(self.headers.get("Content-Length", 0))
-        if content_len > MAX_BODY_SIZE:
-            return self.send_error(413)
-        body = self.rfile.read(content_len)
-        try: req = json.loads(body) if body else {}
-        except: req = {}
-        return self._substitutions(req)
-    if p.path.startswith("/api/tags/"):
-        content_len = int(self.headers.get("Content-Length", 0))
-        if content_len > MAX_BODY_SIZE:
-            return self.send_error(413)
-        body = self.rfile.read(content_len)
-        try: req = json.loads(body) if body else {}
-        except: req = {}
-        return self._tags_save(unquote(p.path[10:]), req)
-    if p.path == "/api/import/restore":
-        content_len = int(self.headers.get("Content-Length", 0))
-        if content_len > MAX_BODY_SIZE:
-            return self.send_error(413)
-        body = self.rfile.read(content_len)
-        try: req = json.loads(body) if body else {}
-        except: req = {}
-        return self._restore(req)
+    if p.path in _POST_ROUTES:
+        req = _read_json(self)
+        return None if req is None else _POST_ROUTES[p.path](self, req)
+    for prefix, handler in _POST_PREFIXES:
+        if p.path.startswith(prefix):
+            req = _read_json(self)
+            return None if req is None else handler(self, unquote(p.path[len(prefix):]), req)
     return _orig_do_POST(self)
 
 Handler.do_GET = _authed_do_GET
@@ -387,8 +421,13 @@ def _maintenance_loop():
                 src_db.backup(dst_db)
                 dst_db.close()
                 src_db.close()
+                if prefix == "vault":
+                    # A copy of the vault is as sensitive as the vault itself.
+                    backup_path.chmod(0o600)
                 log.info(f"Backup created: {backup_path.name}")
-                for old in sorted(BACKUP_DIR.glob(f"{prefix}_*.db"))[:-3]:
+                # Only rotate our own timestamped files: a snapshot someone parked
+                # here by hand (recipes_pre_vault_….db) is not ours to delete.
+                for old in sorted(BACKUP_DIR.glob(f"{prefix}_[0-9]*.db"))[:-3]:
                     old.unlink()
                     log.info(f"Pruned old backup: {old.name}")
         except Exception as e:

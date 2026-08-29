@@ -1,29 +1,15 @@
 """Recipe handlers: search, detail, meta, similar, favorites, translate, import, edit, delete, cookidoo, nutrition."""
 import json, hashlib, re, time
-import urllib.request
-import urllib.parse
-from ..config import LANG_NAMES, META_CACHE_TTL
+from ..config import LANG_NAMES, META_CACHE_TTL, log
 from ..db import (get_db, _fts_escape, slim_row, slim_rows, full_row, find_recipe,
                   search_user_recipes, fts_index, fts_unindex)
+from ..net import UnsafeURL, safe_get
+from ..sanitize import json_col, sanitize_list, sanitize_str
 from ..users import users_exist
 from ..translate import _gtranslate
-from ..ai import _ai_chat
+from ..ai import _ai_chat, rate_limited
 
 _meta_cache = {"data": None, "ts": 0}
-
-
-def _strip_html(v):
-    return re.sub(r"<[^>]+>", "", str(v)) if v else ""
-
-
-def sanitize_str(v, max_len=500):
-    return _strip_html(v)[:max_len].strip()
-
-
-def sanitize_list(lst, max_items=100, max_len=500):
-    if not isinstance(lst, list):
-        lst = [lst]
-    return [sanitize_str(x, max_len) for x in lst[:max_items] if x]
 
 
 def _int_param(params, name, default, lo, hi):
@@ -171,11 +157,11 @@ def _similar(self, rid, params):
     if not row:
         self._json({"recipes": []})
         return
-    ings = json.loads(row["ingredients"])[:3]
+    ings = json_col(row["ingredients"], [])[:3]
     # Build FTS query from first 3 ingredients (extract key words)
     terms = []
     for ing in ings:
-        words = [w for w in ing.split() if len(w) > 3 and not w.replace(',','').isdigit()]
+        words = [w for w in str(ing).split() if len(w) > 3 and not w.replace(',','').isdigit()]
         if words:
             terms.append(words[-1])  # last word is usually the ingredient name
     if not terms:
@@ -209,7 +195,12 @@ def _favorites_list(self, params):
     self._json({"total":len(rows),"offset":0,"limit":len(rows),"recipes":slim_rows(rows, self.user_id)})
 
 def _translate(self, rid, req):
-    tgt = req.get("lang", "en")
+    tgt = str(req.get("lang", "en"))
+    if tgt not in LANG_NAMES:
+        return self._json({"error": "unsupported language"}, 400)
+    # One recipe is dozens of calls to the translation service; keep it a trickle.
+    if rate_limited("translate", self.user_id or self.client_address[0], 5, 300):
+        return self._json({"error": "Too many translations. Try again shortly."}, 429)
     db = get_db()
     row = find_recipe(db, rid, self.user_id)
     if not row:
@@ -225,10 +216,10 @@ def _translate(self, rid, req):
     # Translate fields
     try:
         name = _gtranslate(row["name"], src, tgt)
-        ings = [_gtranslate(i, src, tgt) for i in json.loads(row["ingredients"])]
-        steps = [_gtranslate(s, src, tgt) for s in json.loads(row["steps"])]
+        ings = [_gtranslate(i, src, tgt) for i in json_col(row["ingredients"], [])]
+        steps = [_gtranslate(s, src, tgt) for s in json_col(row["steps"], [])]
         yld = _gtranslate(row["yield"], src, tgt) if row["yield"] else ""
-        cats = [_gtranslate(c, src, tgt) for c in json.loads(row["categories"])]
+        cats = [_gtranslate(c, src, tgt) for c in json_col(row["categories"], [])]
         kw = _gtranslate(row["keywords"], src, tgt) if row["keywords"] else ""
     except Exception as e:
         return self._json({"error": f"translation failed: {e}"}, 500)
@@ -290,14 +281,14 @@ def _recipe_edit(self, rid, req):
         return self._json({"error": "shared library recipes are read-only"}, 403)
 
     name = sanitize_str(req.get("name", row["name"]), 200) or row["name"]
-    ingredients = sanitize_list(req.get("ingredients") or json.loads(row["ingredients"]))
-    steps = sanitize_list(req.get("steps") or json.loads(row["steps"]), max_items=50, max_len=2000)
+    ingredients = sanitize_list(req.get("ingredients") or json_col(row["ingredients"], []))
+    steps = sanitize_list(req.get("steps") or json_col(row["steps"], []), max_items=50, max_len=2000)
     if not ingredients or not steps:
         return self._json({"error": "ingredients and steps must be non-empty lists"}, 400)
     image = sanitize_str(req.get("image", row["image"]), 500)
     yld = sanitize_str(req.get("yield", row["yield"]), 50)
     total_time = sanitize_str(req.get("totalTime", row["total_time"]), 20)
-    categories = sanitize_list(req.get("categories") or json.loads(row["categories"]), 20, 100)
+    categories = sanitize_list(req.get("categories") or json_col(row["categories"], []), 20, 100)
     keywords = sanitize_str(req.get("keywords", row["keywords"]), 500)
 
     table = "recipes" if is_library else "vault.user_recipes"
@@ -333,34 +324,57 @@ def _recipe_delete(self, rid):
     db.commit()
     self._json({"ok": True})
 
+#: Cookidoo runs one site per country. Matching "a host with cookidoo in it" would
+#: also accept cookidoo.attacker.example, so the tail is spelled out — adding a
+#: country later is one entry here.
+_COOKIDOO_SUFFIXES = frozenset("""
+    international thermomix.com de at ch co.uk ie fr be nl lu es pt it pl cz sk hu
+    ro si hr rs bg gr se dk fi no ee lt lv is tr ua com.au co.nz ca com.mx cl
+    com.co com.br co.za ae sg my co.id in tw co.kr com.cn
+""".split())
+
+_COOKIDOO_HOST = re.compile(r"^(?:www\.)?cookidoo\.(.+)$")
+
+
+def _is_cookidoo(host: str) -> bool:
+    m = _COOKIDOO_HOST.match(host)
+    return bool(m) and m.group(1) in _COOKIDOO_SUFFIXES
+
+
 def _cookidoo_import(self, req):
     """Scrape Cookidoo URL for public data, AI-generate steps, save."""
-    url = req.get("url", "").strip()
-    if not url or "cookidoo" not in url:
-        return self._json({"error": "Invalid Cookidoo URL"}, 400)
-    # Scrape public data
+    url = str(req.get("url", "")).strip()
+    if rate_limited("import", self.user_id or self.client_address[0], 10, 300):
+        return self._json({"error": "Too many imports. Try again shortly."}, 429)
     try:
-        ureq = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        html = urllib.request.urlopen(ureq, timeout=15).read().decode()
-    except Exception as e:
-        return self._json({"error": f"Failed to fetch: {e}"}, 500)
+        html = safe_get(url, host_ok=_is_cookidoo).decode("utf-8", "replace")
+    except UnsafeURL as e:
+        return self._json({"error": f"Not a usable Cookidoo link — {e}"}, 400)
+    except Exception:
+        # Never echo the transport error: it maps out what the server can reach.
+        log.warning("cookidoo import failed", exc_info=True)
+        return self._json({"error": "Could not fetch that page."}, 502)
     import html as html_mod
     m = re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL)
     if not m:
         return self._json({"error": "No recipe data found on page"}, 404)
     try:
         data = json.loads(m.group(1))
-    except:
-        return self._json({"error": "Failed to parse recipe data"}, 500)
-    name = html_mod.unescape(data.get("name", ""))
-    ingredients = [html_mod.unescape(i) for i in data.get("recipeIngredient", [])]
-    image = data.get("image", "")
-    total_time = data.get("totalTime", "")
-    yld = data.get("recipeYield", "")
-    nutrition = data.get("nutrition", {})
-    categories = data.get("recipeCategory", [])
-    keywords = data.get("keywords", "")
-    lang = data.get("inLanguage", "en")[:2]
+    except Exception:
+        return self._json({"error": "Failed to parse recipe data"}, 400)
+    if not isinstance(data, dict):
+        return self._json({"error": "No recipe data found on page"}, 404)
+    # Scraped from someone else's page: hold it to the same limits as a manual import.
+    name = sanitize_str(html_mod.unescape(str(data.get("name", ""))), 200)
+    ingredients = sanitize_list(
+        [html_mod.unescape(str(i)) for i in data.get("recipeIngredient", []) or []])
+    image = sanitize_str(data.get("image", ""), 500)
+    total_time = sanitize_str(data.get("totalTime", ""), 20)
+    yld = sanitize_str(data.get("recipeYield", ""), 50)
+    nutrition = data.get("nutrition") if isinstance(data.get("nutrition"), dict) else {}
+    categories = sanitize_list(data.get("recipeCategory", []), 20, 100)
+    keywords = sanitize_str(data.get("keywords", ""), 500)
+    lang = sanitize_str(data.get("inLanguage", "en"), 5)[:2].lower() or "en"
     if not name or not ingredients:
         return self._json({"error": "Recipe has no name or ingredients"}, 400)
     # Check if already exists
@@ -386,12 +400,15 @@ def _cookidoo_import(self, req):
                 steps = json.loads(arr_m.group())
         except:
             steps = [s.strip() for s in ai_result.split("\n") if s.strip() and not s.strip().startswith("{")]
+    steps = sanitize_list(steps, max_items=50, max_len=2000)
     if not steps:
         steps = ["Follow standard preparation method for this recipe."]
     # Save
     rid = hashlib.md5(f"{self.user_id}:{name}:{lang}".encode()).hexdigest()[:12]
-    nut = {"calories": nutrition.get("calories",""), "protein": nutrition.get("proteinContent",""),
-           "carbs": nutrition.get("carbohydrateContent",""), "fat": nutrition.get("fatContent","")}
+    nut = {"calories": sanitize_str(nutrition.get("calories", ""), 30),
+           "protein": sanitize_str(nutrition.get("proteinContent", ""), 30),
+           "carbs": sanitize_str(nutrition.get("carbohydrateContent", ""), 30),
+           "fat": sanitize_str(nutrition.get("fatContent", ""), 30)}
     db.execute(
         "INSERT OR IGNORE INTO vault.user_recipes(id,owner,name,country,lang,collection,image,total_time,yield,categories,ingredients,steps,nutrition,keywords) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (rid, self.user_id, name, "Imported", lang, "Cookidoo Import", image, total_time, yld,

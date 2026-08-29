@@ -18,8 +18,9 @@ them; vault tables are addressed as `vault.<table>`. A per-connection view,
 different route: the library through FTS5, private recipes through
 `search_user_recipes`, merged in `_search`.
 """
-import json, re, sqlite3, threading
+import json, os, re, sqlite3, threading
 from .config import DB_PATH, VAULT_DB_PATH, log
+from .sanitize import json_col
 
 local = threading.local()
 _migrated = threading.Event()
@@ -144,7 +145,21 @@ def init_db():
             boot.execute("PRAGMA vault.wal_checkpoint(TRUNCATE)")
         finally:
             boot.close()
+        _restrict_permissions()
         _migrated.set()
+
+
+def _restrict_permissions():
+    """
+    vault.db holds access-key hashes and everybody's cooking; the default 0644 on
+    a shared host or a bind mount lets any local account read it. Best effort —
+    some filesystems (a Windows bind mount) simply ignore the mode.
+    """
+    for path in (VAULT_DB_PATH, f"{VAULT_DB_PATH}-wal", f"{VAULT_DB_PATH}-shm"):
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
 
 
 def get_db():
@@ -271,8 +286,11 @@ def search_user_recipes(db, uid, query="", country="", lang="", collection="",
     """
     wheres, args = ["owner=?"], [uid]
     if query:
-        needle = f"%{query.strip().lower()}%"
-        wheres.append("(lower(name) LIKE ? OR lower(ingredients) LIKE ? OR lower(keywords) LIKE ?)")
+        # Escape LIKE wildcards so searching for "50%" is a search, not a match-all.
+        escaped = re.sub(r"([%_\\])", r"\\\1", query.strip().lower())
+        needle = f"%{escaped}%"
+        wheres.append("(lower(name) LIKE ? ESCAPE '\\' OR lower(ingredients) LIKE ? ESCAPE '\\'"
+                      " OR lower(keywords) LIKE ? ESCAPE '\\')")
         args += [needle, needle, needle]
     if country:
         wheres.append("country=?"); args.append(country)
@@ -347,7 +365,7 @@ def slim_row(row, noted_ids=None):
         "id":row["id"],"name":row["name"],"country":row["country"],
         "lang":row["lang"],"collection":row["collection"],"image":row["image"],
         "totalTime":row["total_time"],"yield":row["yield"],
-        "stepCount":len(json.loads(row["steps"])),
+        "stepCount":len(json_col(row["steps"], [])),
         "hasNote": row["id"] in noted_ids if noted_ids is not None else False,
     }
 
@@ -396,7 +414,7 @@ def _get_ingredient_icon(text):
 ICON_BASE = "https://assets.tmecosys.com/image/upload/t_web_ingredient_48x48/icons/ingredient_icons/"
 
 def full_row(row):
-    ingredients = json.loads(row["ingredients"])
+    ingredients = json_col(row["ingredients"], [])
     ing_icons = []
     for ing in ingredients:
         icon_id = _get_ingredient_icon(ing)
@@ -405,10 +423,10 @@ def full_row(row):
         "id":row["id"],"name":row["name"],"country":row["country"],
         "lang":row["lang"],"collection":row["collection"],"image":row["image"],
         "totalTime":row["total_time"],"yield":row["yield"],
-        "categories":json.loads(row["categories"]),
+        "categories":json_col(row["categories"], []),
         "ingredients":ingredients,
         "ingredient_icons":ing_icons,
-        "steps":json.loads(row["steps"]),
-        "nutrition":json.loads(row["nutrition"]),
+        "steps":json_col(row["steps"], []),
+        "nutrition":json_col(row["nutrition"], {}),
         "keywords":row["keywords"],
     }

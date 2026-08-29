@@ -6,9 +6,9 @@ services:
     ports:
       - "8039:8080"
     volumes:
-      # recipes.db is the shared library; vault.db holds every vault's private
-      # data (access keys, favourites, history, lists, imported recipes).
       - ./data:/data
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - .env
     environment:

@@ -1,5 +1,6 @@
 """AI chat provider abstraction and rate limiting."""
 import json
+import time
 import urllib.request
 from .config import (log, LLM_PROVIDER, OLLAMA_URL, OLLAMA_MODEL,
                      GROQ_API_KEY, GROQ_MODEL, OPENROUTER_API_KEY, OPENROUTER_MODEL)
@@ -8,6 +9,35 @@ from .config import (log, LLM_PROVIDER, OLLAMA_URL, OLLAMA_MODEL,
 _ai_rate = {}  # ip -> (count, window_start)
 AI_RATE_LIMIT = 10  # requests per minute
 AI_RATE_WINDOW = 60  # seconds
+
+_buckets: dict[tuple[str, str], tuple[int, float]] = {}
+_MAX_TRACKED = 4096
+
+
+def rate_limited(bucket: str, who: str, limit: int = AI_RATE_LIMIT,
+                 window: int = AI_RATE_WINDOW) -> bool:
+    """
+    True when `who` has already used up `limit` calls of `bucket` in `window`.
+
+    Counting is per identity rather than per IP: several people behind one router
+    each get their own allowance, and one vault cannot spend the whole install's
+    AI budget. The map is bounded, so it cannot be grown into a memory leak.
+    """
+    key = (bucket, who)
+    now = time.time()
+    count, start = _buckets.get(key, (0, now))
+    if now - start > window:
+        count, start = 0, now
+    if count >= limit:
+        return True
+    if len(_buckets) >= _MAX_TRACKED:
+        for k, (_, s) in list(_buckets.items()):
+            if now - s > window:
+                del _buckets[k]
+        if len(_buckets) >= _MAX_TRACKED:
+            _buckets.clear()
+    _buckets[key] = (count + 1, start)
+    return False
 
 def _ai_chat(messages, max_tokens=1024):
     """Call AI using provider priority from LLM_PROVIDER env var."""

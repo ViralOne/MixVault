@@ -1,5 +1,7 @@
 """Shopping list handlers. Every row is scoped to the caller's user_id."""
 from ..db import get_db
+from ..sanitize import (MAX_SHOPPING_ITEM, MAX_SHOPPING_ITEMS_PER_CALL, clamp_int,
+                        sanitize_list, sanitize_str)
 
 
 def _rows(db, uid):
@@ -13,13 +15,12 @@ def _shopping_list(self, params=None):
 
 def _shopping_add(self, req):
     db = get_db()
-    items = req.get("items", [])
-    rid = str(req.get("recipe_id", ""))
-    rname = str(req.get("recipe_name", ""))
+    items = sanitize_list(req.get("items", []), MAX_SHOPPING_ITEMS_PER_CALL, MAX_SHOPPING_ITEM)
+    rid = sanitize_str(req.get("recipe_id", ""), 64)
+    rname = sanitize_str(req.get("recipe_name", ""), 200)
     for item in items:
-        if isinstance(item, str) and item.strip():
-            db.execute("INSERT INTO vault.shopping_list(user_id,item,recipe_id,recipe_name) VALUES(?,?,?,?)",
-                       [self.user_id, item.strip(), rid, rname])
+        db.execute("INSERT INTO vault.shopping_list(user_id,item,recipe_id,recipe_name) VALUES(?,?,?,?)",
+                   [self.user_id, item, rid, rname])
     db.commit()
     _shopping_list(self)
 
@@ -50,11 +51,15 @@ def _shopping_restore(self, req):
     """Restore previously deleted shopping items (undo)."""
     db = get_db()
     items = req.get("items", [])
-    for item in items:
-        if isinstance(item, dict) and item.get("item"):
+    if not isinstance(items, list):
+        items = []
+    for item in items[:MAX_SHOPPING_ITEMS_PER_CALL]:
+        text = sanitize_str(item.get("item"), MAX_SHOPPING_ITEM) if isinstance(item, dict) else ""
+        if text:
             db.execute("INSERT INTO vault.shopping_list(user_id,item,recipe_id,recipe_name,checked) VALUES(?,?,?,?,?)",
-                       [self.user_id, item["item"], item.get("recipe_id",""), item.get("recipe_name",""),
-                        item.get("checked",0)])
+                       [self.user_id, text, sanitize_str(item.get("recipe_id"), 64),
+                        sanitize_str(item.get("recipe_name"), 200),
+                        clamp_int(item.get("checked"), 0, 0, 1)])
     db.commit()
     _shopping_list(self)
 

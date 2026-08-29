@@ -3,6 +3,20 @@ import hashlib, html, time
 from pathlib import Path
 from ..config import DB_PATH, BACKUP_DIR, START_TIME
 from ..db import get_db, full_row, find_recipe
+from ..sanitize import (MAX_NOTE, MAX_TAG, MAX_TAGS_PER_RECIPE, json_text,
+                        sanitize_list, sanitize_str)
+
+
+def _csv_safe(value):
+    """
+    Neutralise spreadsheet formulas.
+
+    A shopping item saved as `=HYPERLINK(...)` is inert in the app, but Excel and
+    Sheets execute it on open. Prefixing an apostrophe keeps the text visible and
+    the cell a string.
+    """
+    text = "" if value is None else str(value)
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
 
 
 def _export(self, params):
@@ -26,7 +40,7 @@ def _export(self, params):
         w = csv.writer(out)
         w.writerow(["item", "recipe_name", "checked"])
         for s in shopping:
-            w.writerow([s["item"], s.get("recipe_name",""), s["checked"]])
+            w.writerow([_csv_safe(s["item"]), _csv_safe(s.get("recipe_name", "")), s["checked"]])
         body = out.getvalue().encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/csv")
@@ -79,7 +93,7 @@ def _health(self, params):
     hours, rem = divmod(rem, 3600)
     mins, _ = divmod(rem, 60)
     # Latest backup age
-    backups = sorted(BACKUP_DIR.glob("recipes_*.db"))
+    backups = sorted(BACKUP_DIR.glob("recipes_[0-9]*.db"))
     backup_age = None
     if backups:
         backup_age = int(time.time() - backups[-1].stat().st_mtime)
@@ -140,7 +154,7 @@ def _note_get(self, rid):
 
 def _note_save(self, rid, req):
     db = get_db()
-    note = req.get("note", "").strip()
+    note = sanitize_str(req.get("note", ""), MAX_NOTE)
     if note:
         db.execute("INSERT OR REPLACE INTO vault.recipe_notes(user_id,recipe_id,note,updated_at)"
                    " VALUES(?,?,?,datetime('now'))", [self.user_id, rid, note])
@@ -149,70 +163,93 @@ def _note_save(self, rid, req):
     db.commit()
     self._json({"ok": True})
 
+_RESTORE_CAP = 5_000
+
+
+def _rows_of(req, key, kind=dict):
+    rows = req.get(key)
+    if not isinstance(rows, list):
+        return []
+    return [r for r in rows[:_RESTORE_CAP] if isinstance(r, kind)]
+
+
 def _restore(self, req):
     """
     Load a vault export back in. Everything lands in the *caller's* vault, so a
     backup can be restored into a fresh vault after a lost key. Repeated restores
     of the same file do not duplicate rows, except shopping items, which have no
     natural identity.
+
+    Restored rows go through the same sanitising as a fresh import: a backup is a
+    file the caller can edit, not a trusted channel into the database.
     """
+    if not isinstance(req, dict):
+        return self._json({"error": "that file is not a MixVault backup"}, 400)
     db = get_db()
     uid = self.user_id
-    counts = {}
+    counts = dict.fromkeys(("favorites", "notes", "shopping", "tags", "history", "recipes"), 0)
 
-    for rid in req.get("favorites") or []:
-        db.execute("INSERT OR IGNORE INTO vault.favorites(user_id,recipe_id) VALUES(?,?)", [uid, str(rid)])
-    counts["favorites"] = len(req.get("favorites") or [])
+    for rid in _rows_of(req, "favorites", str):
+        rid = sanitize_str(rid, 64)
+        if rid:
+            db.execute("INSERT OR IGNORE INTO vault.favorites(user_id,recipe_id) VALUES(?,?)", [uid, rid])
+            counts["favorites"] += 1
 
-    for n in req.get("notes") or []:
-        if n.get("recipe_id") and n.get("note"):
+    for n in _rows_of(req, "notes"):
+        rid, note = sanitize_str(n.get("recipe_id"), 64), sanitize_str(n.get("note"), MAX_NOTE)
+        if rid and note:
             db.execute("INSERT OR REPLACE INTO vault.recipe_notes(user_id,recipe_id,note,updated_at)"
-                       " VALUES(?,?,?,datetime('now'))", [uid, n["recipe_id"], n["note"]])
-    counts["notes"] = len(req.get("notes") or [])
+                       " VALUES(?,?,?,datetime('now'))", [uid, rid, note])
+            counts["notes"] += 1
 
-    for s in req.get("shopping") or []:
-        if s.get("item"):
+    for s in _rows_of(req, "shopping"):
+        item = sanitize_str(s.get("item"), 200)
+        if item:
             db.execute("INSERT INTO vault.shopping_list(user_id,item,recipe_id,recipe_name,checked)"
                        " VALUES(?,?,?,?,?)",
-                       [uid, s["item"], s.get("recipe_id",""), s.get("recipe_name",""), s.get("checked",0)])
-    counts["shopping"] = len(req.get("shopping") or [])
+                       [uid, item, sanitize_str(s.get("recipe_id"), 64),
+                        sanitize_str(s.get("recipe_name"), 200), 1 if s.get("checked") else 0])
+            counts["shopping"] += 1
 
-    for t in req.get("tags") or []:
-        if t.get("recipe_id") and t.get("tag"):
+    for t in _rows_of(req, "tags"):
+        rid, tag = sanitize_str(t.get("recipe_id"), 64), sanitize_str(t.get("tag"), MAX_TAG)
+        if rid and tag:
             db.execute("INSERT OR IGNORE INTO vault.recipe_tags(user_id,recipe_id,tag) VALUES(?,?,?)",
-                       [uid, t["recipe_id"], t["tag"]])
-    counts["tags"] = len(req.get("tags") or [])
+                       [uid, rid, tag])
+            counts["tags"] += 1
 
-    for h in req.get("history") or []:
-        if not h.get("recipe_id"):
+    for h in _rows_of(req, "history"):
+        rid = sanitize_str(h.get("recipe_id"), 64)
+        if not rid:
             continue
+        cooked_at = sanitize_str(h.get("cooked_at"), 32) or None
         # Same recipe at the same instant is the same cook, however often you restore.
         dup = db.execute("SELECT 1 FROM vault.cooking_history WHERE user_id=? AND recipe_id=? AND cooked_at=?",
-                         [uid, h["recipe_id"], h.get("cooked_at")]).fetchone()
+                         [uid, rid, cooked_at]).fetchone()
         if not dup:
             db.execute("INSERT INTO vault.cooking_history(user_id,recipe_id,cooked_at) VALUES(?,?,?)",
-                       [uid, h["recipe_id"], h.get("cooked_at")])
-    counts["history"] = len(req.get("history") or [])
+                       [uid, rid, cooked_at])
+            counts["history"] += 1
 
-    restored_recipes = 0
-    for r in req.get("recipes") or []:
-        if not (r.get("id") and r.get("name")):
+    for r in _rows_of(req, "recipes"):
+        rid, name = sanitize_str(r.get("id"), 64), sanitize_str(r.get("name"), 200)
+        if not (rid and name):
             continue
-        rid = r["id"]
         existing = db.execute("SELECT owner FROM vault.user_recipes WHERE id=?", [rid]).fetchone()
         if existing and existing["owner"] != uid:
             # The id is taken by another vault; give this copy its own.
-            rid = hashlib.md5(f"{uid}:{r['name']}:{r.get('created_at','')}".encode()).hexdigest()[:12]
+            rid = hashlib.md5(f"{uid}:{name}:{r.get('created_at','')}".encode()).hexdigest()[:12]
         db.execute(
             "INSERT OR REPLACE INTO vault.user_recipes(id,owner,name,country,lang,collection,image,"
             "total_time,yield,categories,ingredients,steps,nutrition,keywords) "
             "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            [rid, uid, r["name"], r.get("country","Custom"), r.get("lang","en"),
-             r.get("collection","My Recipes"), r.get("image",""), r.get("total_time",""),
-             r.get("yield",""), r.get("categories","[]"), r.get("ingredients","[]"),
-             r.get("steps","[]"), r.get("nutrition","{}"), r.get("keywords","")])
-        restored_recipes += 1
-    counts["recipes"] = restored_recipes
+            [rid, uid, name, sanitize_str(r.get("country", "Custom"), 50),
+             sanitize_str(r.get("lang", "en"), 5), sanitize_str(r.get("collection", "My Recipes"), 100),
+             sanitize_str(r.get("image", ""), 500), sanitize_str(r.get("total_time", ""), 20),
+             sanitize_str(r.get("yield", ""), 50), json_text(r.get("categories"), "[]"),
+             json_text(r.get("ingredients"), "[]"), json_text(r.get("steps"), "[]"),
+             json_text(r.get("nutrition"), "{}"), sanitize_str(r.get("keywords", ""), 500)])
+        counts["recipes"] += 1
 
     db.commit()
     self._json({"ok": True, "restored": counts})
@@ -234,12 +271,10 @@ def _tags_get(self, rid):
 
 def _tags_save(self, rid, req):
     db = get_db()
-    tags = req.get("tags", [])
+    tags = sanitize_list(req.get("tags", []), MAX_TAGS_PER_RECIPE, MAX_TAG)
     db.execute("DELETE FROM vault.recipe_tags WHERE user_id=? AND recipe_id=?", [self.user_id, rid])
     for t in tags:
-        t = str(t).strip()
-        if t:
-            db.execute("INSERT OR IGNORE INTO vault.recipe_tags(user_id,recipe_id,tag) VALUES(?,?,?)",
-                       [self.user_id, rid, t])
+        db.execute("INSERT OR IGNORE INTO vault.recipe_tags(user_id,recipe_id,tag) VALUES(?,?,?)",
+                   [self.user_id, rid, t])
     db.commit()
-    self._json({"ok": True})
+    self._json({"ok": True, "tags": tags})

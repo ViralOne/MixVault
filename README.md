@@ -176,24 +176,30 @@ OLLAMA_MODEL=qwen3.5
 
 # Groq (free tier, fast)
 GROQ_API_KEY=gsk_...
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=qwen/qwen3.8-27b
 
-# OpenRouter (free tier, many models)
+# OpenRouter (free tier, many models). openrouter/free auto-routes to whatever
+# free model is live, so it does not go stale like a pinned id.
 OPENROUTER_API_KEY=sk-or-...
-OPENROUTER_MODEL=qwen/qwen3.6-plus-preview:free
+OPENROUTER_MODEL=openrouter/free
 
 # Access: vaults are opened with access keys (scripts/users.py add)
 ALLOW_SIGNUP=          # 1 = show "Create a new vault" on the login page
 COOKIE=mv_key          # session cookie name; rename to sign every device out
 SESSION_MAX_AGE=31536000   # session lifetime in seconds (1 year)
 CORS_ORIGINS=          # extra origins allowed to call the API; empty = same-origin only
-TRUST_PROXY=           # 1 only behind a proxy you control (needed for the login throttle)
+TRUST_PROXY=           # 1 only behind a proxy you control (login throttle + Secure cookie)
 
 # Legacy: single shared PIN, ignored once access keys exist
 AUTH_PIN=1234
 ```
 
-Only configure the providers you want to use. The app tries them in `LLM_PROVIDER` order and falls through on failure.
+Only configure the providers you want to use. The app tries them in `LLM_PROVIDER` order and falls through on failure — silently, so a retired model id looks like "AI unavailable". Both providers publish their current list:
+
+```bash
+curl -s https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY" | jq -r '.data[].id'
+curl -s https://openrouter.ai/api/v1/models | jq -r '.data[].id'
+```
 
 ## Architecture
 
@@ -202,11 +208,21 @@ Only configure the providers you want to use. The app tries them in `LLM_PROVIDE
 - **Database**: two SQLite files (library + vault) opened as one connection via
   `ATTACH`; WAL mode, hourly automated backups of both, daily optimize
 - **Deployment**: Docker + optional Caddy reverse proxy for HTTPS
-- **Security**: access-key sessions (httpOnly cookie, `Secure` behind HTTPS),
-  per-vault row scoping on every query, read-only shared library in multi-user mode,
-  throttled login, `no-store` on personal responses, CORS allowlist (not origin
-  reflection), HTML-escaped share pages, rate limiting on AI, Content-Length limits,
-  input sanitization
+
+### Security
+
+| Area | What is in place |
+|------|------------------|
+| Sessions | Access-key cookie, httpOnly, `SameSite=Lax`, `Secure` when `TRUST_PROXY=1` and the proxy reports https |
+| Vault isolation | Every query is scoped by `user_id`; the shared library is read-only once keys exist; nothing over HTTP can list or count vaults |
+| Login | Per-IP throttle (8 tries / 5 min, then a lockout), identical wording for wrong, unknown and revoked keys, `hmac.compare_digest` on the legacy PIN |
+| Cross-site | Writes with a foreign `Origin` or `Sec-Fetch-Site` are refused — including `/api/auth`, so no site can sign a visitor into its own vault |
+| Browser headers | CSP with the inline script allowed by hash (no `unsafe-inline` for scripts), `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` |
+| Outbound requests | A user-supplied import URL must be http(s), on a real Cookidoo site, resolving to a public address — redirects re-checked, response size capped ([`lib/net.py`](lib/net.py)) |
+| Untrusted input | One place shapes every write: HTML stripped, lengths and row counts capped, JSON columns validated ([`lib/sanitize.py`](lib/sanitize.py)) |
+| Third-party cost | Per-identity rate limits on chat, image lookup, translation and import |
+| At rest | `vault.db` and its backups are `0600`; `no-store, private` on every personal response; share pages HTML-escaped under `default-src 'none'` |
+| Exports | Shopping-list CSV neutralises spreadsheet formulas (`=`, `+`, `-`, `@`) |
 
 ## API
 

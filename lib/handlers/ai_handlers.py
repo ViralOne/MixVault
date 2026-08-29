@@ -1,25 +1,55 @@
 """AI-powered handlers: search, recipe creator, image search, substitutions."""
-import json, re, time
+import json, re
 import urllib.request
 import urllib.parse
 from ..config import log, GROQ_API_KEY, OPENROUTER_API_KEY
 from ..db import get_db, slim_row
-from ..ai import _ai_chat, _ai_rate, AI_RATE_LIMIT, AI_RATE_WINDOW
+from ..ai import _ai_chat, rate_limited
+from ..sanitize import sanitize_str
+
+_LIMITS = {"chat": (10, 60), "images": (30, 60)}
+
+
+def _over_limit(self, bucket="chat"):
+    """
+    Send a 429 and return True when the caller has spent their allowance.
+
+    Every handler that calls out to an LLM goes through here — an authenticated
+    person should not be able to run up the owner's API bill in a loop.
+    """
+    limit, window = _LIMITS.get(bucket, _LIMITS["chat"])
+    who = self.user_id or self.client_address[0]
+    if rate_limited(bucket, who, limit, window):
+        self._json({"error": "Too many AI requests. Try again in a minute."}, 429)
+        return True
+    return False
+
+
+_MAX_TURNS = 40
+_MAX_TURN_CHARS = 4_000
+
+
+def _clean_messages(raw):
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for m in raw[-_MAX_TURNS:]:
+        if not isinstance(m, dict):
+            continue
+        role = m.get("role")
+        content = m.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str) or not content.strip():
+            continue
+        out.append({"role": role, "content": content[:_MAX_TURN_CHARS]})
+    return out
 
 
 def _ai(self, req):
-    # Rate limiting
-    ip = self.client_address[0]
-    now = time.time()
-    count, window_start = _ai_rate.get(ip, (0, now))
-    if now - window_start > AI_RATE_WINDOW:
-        count, window_start = 0, now
-    if count >= AI_RATE_LIMIT:
-        return self._json({"error": "Rate limited. Try again in a minute."}, 429)
-    _ai_rate[ip] = (count + 1, window_start)
+    if _over_limit(self):
+        return
 
-    prompt = req.get("prompt", "")
-    recipe_context = req.get("context", "")
+    prompt = sanitize_str(req.get("prompt", ""), 1_000)
+    recipe_context = sanitize_str(req.get("context", ""), 2_000)
     if not prompt:
         return self._json({"error": "no prompt"}, 400)
     # AI-powered search: extract keywords from natural language, search DB
@@ -95,10 +125,12 @@ No explanation, just the JSON."""},
 
 def _ai_create(self, req):
     """Multi-turn chat for recipe creation."""
-    messages = req.get("messages", [])
+    if _over_limit(self):
+        return
+    messages = _clean_messages(req.get("messages"))
     if not messages:
         return self._json({"error": "no messages"}, 400)
-    
+
     system = """You are a creative chef assistant. Help the user create a recipe.
 - Ask about preferences, dietary restrictions, available ingredients
 - Suggest alternatives when asked
@@ -138,10 +170,12 @@ def _ai_create(self, req):
 
 def _ai_image_search(self, req):
     """Find images for a recipe - search DB or Unsplash."""
-    query = req.get("query", "")
+    if _over_limit(self, "images"):
+        return
+    query = sanitize_str(req.get("query", ""), 100)
     if not query:
         return self._json({"error": "no query"}, 400)
-    
+
     images = []
     # 1. Search DB for similar recipe images by name
     db = get_db()
@@ -196,8 +230,10 @@ def _ai_image_search(self, req):
 
 def _substitutions(self, req):
     """AI-powered ingredient substitution suggestions."""
-    ingredient = req.get("ingredient", "").strip()
-    context = req.get("context", "")  # recipe name or dietary need
+    if _over_limit(self):
+        return
+    ingredient = sanitize_str(req.get("ingredient", ""), 200)
+    context = sanitize_str(req.get("context", ""), 200)  # recipe name or dietary need
     if not ingredient:
         return self._json({"error": "no ingredient"}, 400)
     messages = [

@@ -6,8 +6,11 @@ usernames, no passwords, no directory. Responses are deliberately uniform: a
 wrong key and an unknown key are indistinguishable, and nothing here reveals
 how many identities exist.
 """
+import base64
 import hashlib
+import hmac
 import json
+import re
 import time
 
 from ..config import ALLOW_SIGNUP, AUTH_PIN, COOKIE, SESSION_MAX_AGE, TRUST_PROXY, log
@@ -52,6 +55,11 @@ def _record_failure(self):
     _failures.setdefault(_client_ip(self), []).append(now)
 
 
+def _pin_token() -> str:
+    """The legacy PIN cookie's value. Compared with `hmac.compare_digest`."""
+    return hashlib.sha256(AUTH_PIN.encode()).hexdigest()[:16]
+
+
 def _cookies(self) -> dict[str, str]:
     jar = {}
     for part in (self.headers.get("Cookie", "") or "").split(";"):
@@ -62,6 +70,14 @@ def _cookies(self) -> dict[str, str]:
 
 
 def _secure_flag(self) -> str:
+    """
+    `Secure` when the browser reached us over TLS — which only a proxy can tell
+    us, and only a proxy we trust. Believing an arbitrary X-Forwarded-Proto would
+    let a caller mark the cookie Secure over plain HTTP, where the browser then
+    refuses to store it at all.
+    """
+    if not TRUST_PROXY:
+        return ""
     proto = self.headers.get("X-Forwarded-Proto", "")
     return "; Secure" if proto.split(",")[0].strip() == "https" else ""
 
@@ -88,7 +104,7 @@ def _check_auth(self):
         return False
     if not AUTH_PIN:
         return True
-    return _cookies(self).get("auth") == hashlib.sha256(AUTH_PIN.encode()).hexdigest()[:16]
+    return hmac.compare_digest(_cookies(self).get("auth", ""), _pin_token())
 
 
 _PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
@@ -146,6 +162,9 @@ __HINT__
 <div id="out"></div>
 </div>
 <script>
+/* Every handler is attached here rather than with an onclick attribute: the page
+   is served under a CSP that allows this one script by hash, and inline attributes
+   would need 'unsafe-hashes' to run. */
 const err=document.getElementById('err'),out=document.getElementById('out');
 const keyInput=document.getElementById('key'),revealBtn=document.getElementById('reveal');
 revealBtn.addEventListener('click',()=>{
@@ -164,7 +183,8 @@ document.getElementById('f').addEventListener('submit',async e=>{
   if(d.ok)location.replace('/');
   else err.textContent=d.error||'That key was not recognised.';
 });
-async function signup(){
+const signupBtn=document.getElementById('signupBtn');
+if(signupBtn) signupBtn.addEventListener('click',async()=>{
   err.textContent='';
   const label=prompt('Name this vault (optional, only you see it):')||'';
   const r=await fetch('/api/auth/new',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -172,12 +192,41 @@ async function signup(){
   const d=await r.json().catch(()=>({}));
   if(!d.ok){err.textContent=d.error||'Could not create a vault.';return;}
   document.getElementById('f').style.display='none';
-  out.innerHTML='<div class="keybox">'+d.key+'</div>'+
-    '<p class="warn">Save this key now — it is shown once and cannot be recovered. '+
-    'Anyone with it can open your vault.</p>'+
-    '<button onclick="location.replace(\\'/\\')">I saved it — continue</button>';
-}
+  const box=document.createElement('div');box.className='keybox';box.textContent=d.key;
+  const warn=document.createElement('p');warn.className='warn';
+  warn.textContent='Save this key now — it is shown once and cannot be recovered. '+
+    'Anyone with it can open your vault.';
+  const go=document.createElement('button');go.textContent='I saved it — continue';
+  go.addEventListener('click',()=>location.replace('/'));
+  out.replaceChildren(box,warn,go);
+});
 </script></body></html>"""
+
+
+def _page_csp() -> str:
+    """
+    CSP for the login page, allowing its own inline script by hash.
+
+    The hash is taken from the template itself, so editing the script above cannot
+    silently break the page — there is no second copy to keep in step.
+    """
+    digests = [
+        "'sha256-" + base64.b64encode(hashlib.sha256(body.encode()).digest()).decode() + "'"
+        for body in re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", _PAGE, re.S)
+    ]
+    return "; ".join([
+        "default-src 'none'",
+        "script-src " + " ".join(digests),
+        "style-src 'unsafe-inline'",
+        "img-src 'self' data:",
+        "connect-src 'self'",
+        "form-action 'none'",
+        "base-uri 'none'",
+        "frame-ancestors 'none'",
+    ])
+
+
+_PAGE_CSP = _page_csp()
 
 
 def _auth_page(self):
@@ -192,7 +241,7 @@ def _auth_page(self):
         placeholder = "••••"
     can_signup = ALLOW_SIGNUP and users_exist()
     signup = (
-        '<button class="ghost" type="button" onclick="signup()">Create a new vault</button>'
+        '<button class="ghost" type="button" id="signupBtn">Create a new vault</button>'
         if can_signup
         else ""
     )
@@ -214,6 +263,7 @@ def _auth_page(self):
     self.send_header("Content-Type", "text/html; charset=utf-8")
     self.send_header("Content-Length", len(body))
     self.send_header("Cache-Control", "no-store")
+    self.send_header("Content-Security-Policy", _PAGE_CSP)
     self.end_headers()
     self.wfile.write(body)
 
@@ -247,9 +297,9 @@ def _auth_login(self, req):
         # Same response for malformed, unknown and revoked keys.
         return _send_json(self, {"ok": False, "error": "That key was not recognised."}, 401)
 
-    if AUTH_PIN and secret == AUTH_PIN:
-        token = hashlib.sha256(AUTH_PIN.encode()).hexdigest()[:16]
-        cookie = f"auth={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_MAX_AGE}{_secure_flag(self)}"
+    if AUTH_PIN and hmac.compare_digest(secret, AUTH_PIN):
+        cookie = (f"auth={_pin_token()}; Path=/; HttpOnly; SameSite=Lax;"
+                  f" Max-Age={SESSION_MAX_AGE}{_secure_flag(self)}")
         return _send_json(self, {"ok": True}, cookie=cookie)
 
     _record_failure(self)

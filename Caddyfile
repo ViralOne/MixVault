@@ -3,13 +3,15 @@
 # For Tailscale: use your tailnet hostname like 'cooker.tail1234.ts.net'
 
 cooker.yourdomain.com {
+    # Caddy forwards X-Forwarded-Proto, which is how the app knows to mark the
+    # session cookie Secure. Set TRUST_PROXY=1 in .env so it believes it.
     reverse_proxy cooker:8080
 
-    # Security headers
     header {
-        X-Content-Type-Options nosniff
-        X-Frame-Options DENY
-        Referrer-Policy strict-origin-when-cross-origin
+        # The app already sends CSP, nosniff, X-Frame-Options, Referrer-Policy and
+        # Permissions-Policy — repeating them here would silently override them
+        # with something weaker. HSTS is Caddy's to add, since it terminates TLS.
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
         -Server
     }
 

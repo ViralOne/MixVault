@@ -20,10 +20,27 @@ function bounceIfUnauthorized(r: Response) {
   throw new Error("unauthorized");
 }
 
+/**
+ * Read the body as JSON, tolerating a response that isn't.
+ *
+ * A 413, a 502 from a proxy or a crashed handler answers with text or nothing at
+ * all; `r.json()` on that throws a parse error that says nothing useful. Callers
+ * look at `error`, so put something legible there instead.
+ */
+async function parse<T>(r: Response): Promise<T> {
+  const text = await r.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const reason = r.ok ? "Unexpected reply from the server" : `${r.status} ${r.statusText}`.trim();
+    return { error: reason } as T;
+  }
+}
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
   bounceIfUnauthorized(r);
-  return (await r.json()) as T;
+  return parse<T>(r);
 }
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
@@ -33,7 +50,7 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   bounceIfUnauthorized(r);
-  return (await r.json()) as T;
+  return parse<T>(r);
 }
 
 export const api = {

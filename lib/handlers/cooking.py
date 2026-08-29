@@ -1,5 +1,6 @@
 """Cooking history and cross-device cooking state handlers, scoped per user."""
 from ..db import get_db, slim_row, find_recipe
+from ..sanitize import clamp_int, sanitize_str
 
 
 def _history_list(self, params=None):
@@ -40,8 +41,8 @@ def _cooking_state_get(self, params):
 
 def _cooking_state_save(self, req):
     db = get_db()
-    rid = req.get("recipe_id")
-    step = req.get("step", 0)
+    rid = sanitize_str(req.get("recipe_id"), 64)
+    step = clamp_int(req.get("step"), 0, 0, 500)
     if rid:
         db.execute("INSERT OR REPLACE INTO vault.cooking_state(user_id,recipe_id,step,updated_at)"
                    " VALUES(?,?,?,datetime('now'))", [self.user_id, rid, step])
