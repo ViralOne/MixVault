@@ -81,7 +81,24 @@ A person signs in with one key — there is no username and no password:
 mv_7q4k-x9f2-h8ta-3wnp-6dbe-5rjm
 ```
 
-Create keys from the CLI (the key is printed once and only its hash is stored):
+### In the app
+
+Once at least one key exists, three controls appear (they are hidden while the
+install is still a single open vault — that is why you may not see them yet):
+
+| where | what it does |
+|---|---|
+| `⇄` in the top bar, next to `⋮` | **Switch vault** — clears the session and returns to the access-key page, where you paste another key. Its tooltip names the vault you are in. |
+| Settings → *Create a vault key* | Mints a key for someone else and shows it once with a Copy button. Your own session is untouched. |
+| Settings → *Sign out* | Same as `⇄`, next to the current vault's name. |
+
+Each browser holds its own session, so you can be one vault in Chrome and another
+in a private window at the same time, without switching.
+
+### From the CLI
+
+Needed for the first key and for admin tasks (the key is printed once; only its
+hash is stored):
 
 ```bash
 python3 scripts/users.py add "Petre"                     # new empty vault
@@ -91,7 +108,7 @@ python3 scripts/users.py stats                           # rows per vault
 python3 scripts/users.py revoke <id> [--delete-data]
 
 # Docker
-docker compose exec cooker python3 scripts/users.py add "Petre"
+docker compose exec cooker python3 scripts/users.py add "Petre" --claim
 ```
 
 Notes:
@@ -107,14 +124,15 @@ Notes:
   the vault and are visible only to their owner — including via `/api/share/:id`.
 - **The shared library is read-only** once access keys exist: no vault can edit or
   delete a recipe everyone else sees (`403`). In single-user mode both still work.
-- **Making keys from the app.** Anyone signed in can mint a key for someone else:
-  Settings → *Create a vault key*. It shows the key once with a Copy button and
-  does not touch your own session. (A new vault reveals nothing about existing
-  ones, which is why members may do this.)
-- **Self-serve signup.** Set `ALLOW_SIGNUP=1` to also put a "Create a new vault"
-  button on the login page, for people who have no key yet.
+- **Who may mint keys.** Anyone already signed in (a new empty vault reveals
+  nothing about existing ones, and they can already see their own). Strangers on
+  the login page cannot, unless you set `ALLOW_SIGNUP=1`, which adds a "Create a
+  new vault" button there.
 - **Losing a key means losing the vault.** Keep `data/vault.db` in your backups —
   hourly backups cover both databases (`data/backups/recipes_*.db`, `vault_*.db`).
+- **Going back to one open vault** takes more than revoking the keys: the data now
+  has an owner, so it would look empty afterwards. Revoke all keys *and* move the
+  rows back to the unowned `user_id = ''`.
 - Behind HTTPS, forward `X-Forwarded-Proto` so the session cookie gets `Secure`.
 
 ## Project Structure
