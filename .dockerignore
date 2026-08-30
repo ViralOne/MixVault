@@ -17,3 +17,6 @@ scripts/download-db.sh
 .playwright-mcp/
 web/node_modules/
 .impeccable/
+
+# CI reads this repo, but nothing in it belongs in the image.
+.github/

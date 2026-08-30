@@ -1,5 +1,8 @@
 # ── Stage 1: build the SolidJS frontend ─────────────────────────────────
-FROM node:22-slim AS web
+# Pinned to the *build* platform: the output is JS and CSS, identical whatever
+# the target architecture, so cross-building an arm64 image never has to run npm
+# under emulation.
+FROM --platform=$BUILDPLATFORM node:22-slim AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci

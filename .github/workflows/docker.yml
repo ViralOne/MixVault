@@ -1,0 +1,234 @@
+name: Docker image
+
+# Publishes ghcr.io/<owner>/mixvault.
+#
+#   push to master  → :latest and :master and :sha-<commit>
+#   tag v1.2.3      → :1.2.3, :1.2, :1 (and :latest)
+#   pull request    → built and smoke-tested, never pushed
+#
+# GHCR needs no secrets: GITHUB_TOKEN is enough, given `packages: write` below.
+# The first push creates the package as private — make it public once from the
+# repository's Packages page if you want `docker pull` to work without a login.
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+    # Docs-only edits do not change the image.
+    paths-ignore: ["**.md", "LICENSE"]
+  pull_request:
+    paths-ignore: ["**.md", "LICENSE"]
+  workflow_dispatch:
+
+# One run per ref: a second push supersedes an in-flight build.
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only by default; the publish job asks for exactly what it needs.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Check and smoke-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Typecheck the frontend
+        working-directory: web
+        run: |
+          npm ci
+          npm run typecheck
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check the backend imports and compiles
+        run: |
+          python3 -m compileall -q server.py lib scripts
+          # Import every module the server does, so a bad import fails here and
+          # not on someone's Raspberry Pi at dinner time.
+          python3 - <<'PY'
+          import importlib
+          for m in ("lib.config", "lib.sanitize", "lib.net", "lib.db", "lib.ai",
+                    "lib.translate", "lib.users",
+                    "lib.handlers.auth", "lib.handlers.misc", "lib.handlers.recipes",
+                    "lib.handlers.shopping", "lib.handlers.cooking",
+                    "lib.handlers.ai_handlers"):
+              importlib.import_module(m)
+          print("all modules import")
+          PY
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build for this runner
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: mixvault:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start it against a throwaway library
+        run: |
+          mkdir -p /tmp/mv/data
+          # The image ships no recipes — recipes.db is mounted. Give it the
+          # smallest database that satisfies the startup check.
+          python3 - <<'PY'
+          import sqlite3
+          db = sqlite3.connect("/tmp/mv/data/recipes.db")
+          db.executescript("""
+            CREATE TABLE recipes(id TEXT PRIMARY KEY, name TEXT, country TEXT, lang TEXT,
+              collection TEXT, image TEXT, total_time TEXT, yield TEXT, categories TEXT,
+              ingredients TEXT, steps TEXT, nutrition TEXT, keywords TEXT);
+            CREATE VIRTUAL TABLE recipes_fts USING fts5(id, name, ingredients, keywords,
+              collection, categories, content='recipes', content_rowid='rowid');
+          """)
+          db.execute("INSERT INTO recipes VALUES('ci1','Pizza Test','Italy','en','CI','','PT10M','2',"
+                     "'[\"Main\"]','[\"flour\"]','[\"Mix 2 min speed 4\"]','{}','pizza')")
+          db.execute("INSERT INTO recipes_fts(rowid,id,name,ingredients,keywords,collection,categories)"
+                     " SELECT rowid,id,name,ingredients,keywords,collection,categories FROM recipes")
+          db.commit()
+          PY
+          docker run -d --name mv -p 8080:8080 -v /tmp/mv/data:/data mixvault:ci
+          for i in $(seq 30); do
+            curl -fsS http://localhost:8080/api/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+      - name: Smoke-test the running image
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; docker logs mv; exit 1; }
+
+          # Liveness, unauthenticated — this is what the compose healthcheck uses.
+          curl -fsS http://localhost:8080/api/health | grep -q '"status": "ok"' \
+            || fail "/api/health did not answer ok"
+
+          # Search works, so the FTS index and the vault attach both came up.
+          curl -fsS 'http://localhost:8080/api/recipes?q=pizza' | grep -q 'Pizza Test' \
+            || fail "search did not find the seeded recipe"
+
+          # The hardening headers are present on the shell.
+          headers=$(curl -fsS -D - -o /dev/null http://localhost:8080/)
+          for h in "X-Content-Type-Options: nosniff" "X-Frame-Options: DENY" \
+                   "Referrer-Policy: no-referrer" "Content-Security-Policy:"; do
+            grep -qi "$h" <<<"$headers" || fail "missing header: $h"
+          done
+          # The CSP must carry a hash for the inline theme script, or the app
+          # loads into a blank page.
+          grep -qi "sha256-" <<<"$headers" || fail "CSP has no script hash"
+
+          # A cross-site write is refused.
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Origin: https://evil.example' -H 'Content-Type: application/json' \
+            -d '{"items":["x"]}' http://localhost:8080/api/shopping/add)
+          [ "$code" = "403" ] || fail "cross-site write returned $code, want 403"
+
+          # The vault was created next to the library, not inside it.
+          test -f /tmp/mv/data/vault.db || fail "vault.db was not created"
+          echo "image looks healthy"
+
+      - name: Container log
+        if: always()
+        run: docker logs mv || true
+
+  publish:
+    name: Push to GHCR
+    needs: verify
+    # Never publish from a pull request: it would run with a fork's contents.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # For the signed provenance attestation attached to the pushed digest.
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the image name
+        # GHCR rejects a name with capitals in it, and an owner login may have
+        # them ("ViralOne"), so lowercase it rather than hardcoding one account.
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "IMAGE=ghcr.io/${OWNER,,}/mixvault" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Work out the tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+          labels: |
+            org.opencontainers.image.title=MixVault
+            org.opencontainers.image.description=Self-hosted Thermomix recipe vault
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # arm64 covers a Raspberry Pi or an ARM NAS. The frontend stage builds
+          # on the runner's own architecture (see the Dockerfile), so this costs
+          # one extra copy of the Python layer, not an emulated npm install.
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest the build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Summary
+        # Tags derive from ref names, so they reach the shell as environment
+        # variables rather than as text spliced into the script.
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          {
+            echo "### Pushed"
+            echo
+            echo '```'
+            echo "$TAGS"
+            echo '```'
+            echo
+            echo "Digest: \`$DIGEST\`"
+            echo
+            echo "Platforms: \`linux/amd64\`, \`linux/arm64\`"
+          } >> "$GITHUB_STEP_SUMMARY"

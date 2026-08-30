@@ -1,5 +1,7 @@
 # MixVault
 
+[![Docker image](https://github.com/ViralOne/MixVault/actions/workflows/docker.yml/badge.svg)](https://github.com/ViralOne/MixVault/actions/workflows/docker.yml)
+
 A self-hosted recipe manager with 70,000+ recipes, AI-powered search, AI recipe creator, guided cooking mode, and multi-device sync.
 
 ## Features
@@ -40,7 +42,23 @@ A self-hosted recipe manager with 70,000+ recipes, AI-powered search, AI recipe 
 docker compose up -d --build
 ```
 
-Access at `http://localhost:8080`
+Access at `http://localhost:8039`
+
+#### Or run the pre-built image
+
+Every push to `master` publishes `ghcr.io/viralone/mixvault` for `linux/amd64` and
+`linux/arm64` (so a Raspberry Pi or ARM NAS works), tagged `latest`, `sha-<commit>`
+and — for a `v*` tag — the version. The image contains no recipes: `recipes.db` is
+mounted, and `vault.db` is created next to it on first run.
+
+```bash
+docker run -d --name mixvault -p 8039:8080 \
+  -v "$PWD/data:/data" --env-file .env \
+  ghcr.io/viralone/mixvault:latest
+```
+
+To use it from compose instead of building locally, swap the `build: .` line in
+`docker-compose.yml` for `image: ghcr.io/viralone/mixvault:latest`.
 
 ### Local
 
@@ -139,6 +157,7 @@ Notes:
 
 ```
 .
+├── .github/workflows/ # CI: typecheck, smoke-test the image, publish to GHCR
 ├── server.py          # Backend (stdlib HTTP server + SQLite)
 ├── lib/               # Backend modules (db, config, users, handlers, ai, translate)
 ├── scripts/users.py   # Vault key management (add / list / stats / revoke)
